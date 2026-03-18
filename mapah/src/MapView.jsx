@@ -2,6 +2,7 @@ import {useEffect, useRef} from "react";
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import places from "./data/places.json";
+
 console.log("Places:", places);
 
 mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
@@ -18,19 +19,18 @@ export default function MapView() {
         });
 
         map.on("load", () => {
-            console.log("Places::", places);
-
-            new mapboxgl.Marker({ color: "red" })
-                .setLngLat([35.2137, 31.7683])
-                .addTo(map);
-
-            places.forEach(place => {
-                new mapboxgl.Marker()
-                    .setLngLat([place.lng, place.lat])
-                    .setPopup(new mapboxgl.Popup().setText(place.name))
-                    .addTo(map);
-            });
-        })
+            fetch("http://localhost:8000/places")
+                .then(res => res.json())
+                .then(data => {
+                    data.forEach(place => {
+                        new mapboxgl.Marker()
+                            .setLngLat([place.lng, place.lat])
+                            .setPopup(new mapboxgl.Popup().setText(place.name))
+                            .addTo(map);
+                    });
+                })
+                .catch(err => console.error("Error fetching places:", err));
+        });
 
 
         return () => map.remove();

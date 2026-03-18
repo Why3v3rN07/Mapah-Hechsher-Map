@@ -5,10 +5,14 @@ class RestaurantBase(BaseModel):
     lat: float
     lng: float
     hechsher: str
-    type: str
+    type: str | None = None
+
+class RestaurantCreate(RestaurantBase):
+    pass
 
 class Restaurant(RestaurantBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
