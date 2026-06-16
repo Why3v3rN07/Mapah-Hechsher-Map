@@ -69,7 +69,7 @@ def get_places_within():
     for place in places:
         if place.Coordinates:
             try:
-                p_lat, p_lng = map(float, place.Coordinates.split(','))
+                p_lat, p_lng = map(float, place.coordinates.split(','))
                 dist = haversine(lat, lng, p_lat, p_lng)
                 if dist <= within:
                     result.append(place.to_dict())
@@ -84,18 +84,18 @@ def add_place():
     name = data.get('name')
     hechsher = data.get('hechsher')
     address = data.get('address')
-    coordinates = data.get('coordinates')
+    coordinates = data.get('coordinates') #TODO - need to get this from ip
     tags = data.get('tags', [])
     if not name or not address or not coordinates:
         return jsonify({"error": "name, address, coordinates are required"}), 400
     place_id = str(uuid.uuid4())[:11].upper()
-    place = Places(PlaceId=place_id, PlaceName=name, StreetAddress=address, Coordinates=coordinates, DateAdded=db.func.current_date())
+    place = Places(place_id=place_id, place_name=name, street_address=address, coordinates=coordinates, date_added=db.func.current_date())
     db.session.add(place)
     if hechsher:
-        ph = PlaceHechshers(PlaceId=place_id, HechsherId=hechsher)
+        ph = PlaceHechshers(place_id=place_id, hechsher_id=hechsher)
         db.session.add(ph)
     for tag in tags:
-        pt = PlaceTags(PlaceId=place_id, PlaceTag=tag)
+        pt = PlaceTags(place_id=place_id, place_tag=tag)
         db.session.add(pt)
     try:
         db.session.commit()

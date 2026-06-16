@@ -1,0 +1,7 @@
+ .\.venv\Scripts\Activate.ps1
+
+ py seed.py
+ py seed.py --wipe
+
+ flask run
+ python run.py

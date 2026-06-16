@@ -34,5 +34,5 @@ def create_app(test_config: dict | None = None) -> Flask:
 # Flask-Login needs this to reload a user from the session
 @login_manager.user_loader
 def load_user(user_id: str):
-    from .models import User
-    return User.query.get(int(user_id))
+    from .models import Users
+    return Users.query.get(int(user_id))

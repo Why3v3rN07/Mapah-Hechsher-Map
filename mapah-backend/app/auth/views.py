@@ -2,7 +2,7 @@ from flask import request, jsonify
 from flask_login import login_user, logout_user, login_required
 
 from app.extensions import db
-from app.models import User
+from app.models import Users
 from . import auth_bp
 
 
@@ -21,14 +21,14 @@ def register():
         return jsonify({"error": "password must be at least 8 characters"}), 400
 
     # Check for duplicates
-    if User.query.filter_by(username=username).first():
+    if Users.query.filter_by(username=username).first():
         return jsonify({"error": "username already taken"}), 409
 
-    if User.query.filter_by(email=email).first():
+    if Users.query.filter_by(email=email).first():
         return jsonify({"error": "email already registered"}), 409
 
     # Create user — password setter calls generate_password_hash internally
-    user = User(username=username, email=email)
+    user = Users(username=username, email=email)
     user.password = password
     db.session.add(user)
     db.session.commit()
@@ -42,7 +42,7 @@ def login():
     username = data.get("username", "")
     password = data.get("password", "")
 
-    user = User.query.filter_by(username=username).first()
+    user = Users.query.filter_by(username=username).first()
 
     if user is None or not user.verify_password(password):
         # Same error for both cases — don't hint which field was wrong
