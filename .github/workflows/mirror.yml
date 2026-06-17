@@ -1,0 +1,35 @@
+name: Sync to classrepo (non-destructive)
+
+on:
+  push:
+    branches:
+      - '**'   # run on pushes to any branch
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # required to push all branches and tags
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+
+      - name: Add secondary remote
+        run: |
+          git remote add classrepo https://$MIRROR_TOKEN@github.com/MCON-357-Spring2026/practicum-final-project-lifo-the-party.git
+        env:
+          MIRROR_TOKEN: ${{ secrets.MIRROR_TOKEN }}
+
+      - name: Push all branches (non-destructive)
+        run: |
+          git push classrepo --all
+
+      - name: Push all tags (non-destructive)
+        run: |
+          git push classrepo --tags

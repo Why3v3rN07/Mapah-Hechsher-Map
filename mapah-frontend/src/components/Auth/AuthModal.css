@@ -1,0 +1,27 @@
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: grid;
+  place-items: center;
+  z-index: 400;
+}
+.modal-card {
+  width: min(460px, 92vw);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1rem;
+}
+.modal-form { display: grid; gap: 0.5rem; }
+.field-label { font-size: 0.85rem; color: var(--color-text-muted); }
+.form-error { color: #b91c1c; font-size: 0.85rem; }
+.modal-actions { margin-top: 0.6rem; display: flex; justify-content: flex-end; gap: 0.5rem; }
+.text-btn {
+  margin-top: 0.75rem;
+  background: transparent;
+  border: none;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+

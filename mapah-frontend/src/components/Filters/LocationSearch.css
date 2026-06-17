@@ -1,0 +1,21 @@
+.location-search { position: relative; }
+.location-search-input-wrap { position: relative; display: flex; }
+.location-clear-btn {
+  position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; font-size: 1.1rem;
+  color: var(--color-text-muted); line-height: 1;
+}
+.location-suggestions {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--color-surface); border: 1px solid var(--color-border);
+  border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.1);
+  list-style: none; margin: 0; padding: 0.25rem 0; z-index: 200;
+  max-height: 260px; overflow-y: auto;
+}
+.location-suggestion {
+  display: flex; align-items: center;
+  padding: 0.75rem; cursor: pointer;
+}
+.location-suggestion:hover { background: var(--color-bg); }
+.suggestion-name  { font-weight: 500; }
+

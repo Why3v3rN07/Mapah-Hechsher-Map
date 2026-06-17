@@ -1,0 +1,21 @@
+.map-container {
+  width: 100%;
+  height: calc(100vh - var(--navbar-height));
+  margin-top: var(--navbar-height);
+}
+
+
+/* Popup styles */
+.popup-content     { min-width: 200px; font-size: 0.875rem; }
+.popup-name        { display: block; font-size: 1rem; margin-bottom: 0.25rem; }
+.popup-distance    { font-size: 0.75rem; color: var(--color-text-muted); margin-left: 0.5rem; }
+.popup-address     { color: var(--color-text-muted); margin-bottom: 0.5rem; }
+.popup-hechshers   { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 0.4rem; }
+.popup-hechsher-icon { height: 24px; width: auto; object-fit: contain; }
+.popup-hechsher-name { font-size: 0.75rem; padding: 2px 4px; background: var(--color-bg); border-radius: 4px; }
+.popup-tags        { display: flex; gap: 0.25rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+.popup-tag         { font-size: 0.7rem; background: var(--color-primary-light); color: var(--color-primary-dark); padding: 2px 6px; border-radius: 10px; }
+.popup-actions     { display: flex; gap: 0.5rem; }
+.popup-action-btn  { font-size: 0.75rem; padding: 4px 8px; border: 1px solid var(--color-border); background: var(--color-surface); border-radius: 6px; cursor: pointer; }
+.popup-action-btn:hover { background: var(--color-bg); }
+
