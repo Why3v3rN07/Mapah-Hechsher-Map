@@ -19,14 +19,31 @@ export default function MapView() {
         });
 
         map.on("load", () => {
-            fetch("http://localhost:8000/places")
-                .then(res => res.json())
+            fetch("http://localhost:5000/api/places")
+                .then(res => {
+                    console.log("Response status:", res.status, res.statusText);
+                    if (!res.ok) {
+                        throw new Error(`HTTP error! status: ${res.status}`);
+                    }
+                    return res.json();
+                })
                 .then(data => {
-                    data.forEach(place => {
-                        new mapboxgl.Marker()
-                            .setLngLat([place.lng, place.lat])
-                            .setPopup(new mapboxgl.Popup().setText(place.name))
-                            .addTo(map);
+                    console.log("Fetched data:", data);
+                    if (!data.items || !Array.isArray(data.items)) {
+                        console.warn("Expected data.items to be an array, got:", data);
+                        return;
+                    }
+                    console.log(`Adding ${data.items.length} markers to map`);
+                    data.items.forEach(place => {
+                        if (place.latitude && place.longitude) {
+                            console.log(`Adding marker for ${place.place_name} at [${place.longitude}, ${place.latitude}]`);
+                            new mapboxgl.Marker()
+                                .setLngLat([place.longitude, place.latitude])
+                                .setPopup(new mapboxgl.Popup().setText(place.place_name))
+                                .addTo(map);
+                        } else {
+                            console.warn(`Skipping ${place.place_name}: missing coordinates`, place);
+                        }
                     });
                 })
                 .catch(err => console.error("Error fetching places:", err));

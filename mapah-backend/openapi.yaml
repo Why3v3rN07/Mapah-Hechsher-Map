@@ -1,0 +1,504 @@
+openapi: 3.1.0
+info:
+  title: Mapah API
+  version: 1.0.0
+  description: >
+    Kosher restaurant hechsher map – backend API contract (spec §8).
+
+servers:
+  - url: http://localhost:5000
+    description: Local development
+
+# ── Security schemes ─────────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    cookieAuthAccess:
+      type: apiKey
+      in: cookie
+      name: access_token
+      description: Short-lived access JWT (15 min TTL).
+    cookieAuthRefresh:
+      type: apiKey
+      in: cookie
+      name: refresh_token
+      description: Long-lived refresh JWT (30 day TTL). Used only on /auth/refresh.
+    csrfHeader:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: >
+        Double-submit CSRF token. Read from the `csrf_token` cookie (not httpOnly)
+        and echo it in this header on all state-changing requests.
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:    { type: string }
+        message: { type: string }
+        details: { type: object }
+
+    Place:
+      type: object
+      properties:
+        place_id:       { type: integer }
+        place_name:     { type: string }
+        street_address: { type: string, nullable: true }
+        latitude:       { type: number, nullable: true }
+        longitude:      { type: number, nullable: true }
+        date_added:     { type: string, format: date, nullable: true }
+        hechshers:
+          type: array
+          items: { $ref: '#/components/schemas/HechsherRef' }
+        tags:
+          type: array
+          items: { type: string, enum: [restaurant, bakery, store, cafe, meat, dairy, parve] }
+        distance:
+          nullable: true
+          type: object
+          properties:
+            value: { type: number }
+            unit:  { type: string, enum: [mi, km] }
+
+    HechsherRef:
+      type: object
+      properties:
+        hechsher_id:           { type: integer }
+        hechsher_display_name: { type: string }
+        hechsher_symbol:       { type: string, nullable: true }
+
+    HechsherSearchResult:
+      allOf:
+        - $ref: '#/components/schemas/HechsherRef'
+        - type: object
+          properties:
+            matched_alias: { type: string, nullable: true }
+
+    Submission:
+      type: object
+      properties:
+        submission_id:         { type: integer }
+        submitted_by_user_id:  { type: integer, nullable: true }
+        place_id:              { type: integer, nullable: true }
+        submission_type:       { type: string, enum: [new_place, tag_update, edit] }
+        payload_json:          { type: object }
+        spam_filter_result:    { type: string, enum: [approved, flagged] }
+        admin_review_status:   { type: string, enum: [pending_review, approved, rejected] }
+        admin_reject_reason:   { type: string, nullable: true }
+        is_visible:            { type: boolean }
+        published_at:          { type: string, format: date-time, nullable: true }
+        created_at:            { type: string, format: date-time }
+        updated_at:            { type: string, format: date-time }
+
+    AuthUser:
+      type: object
+      properties:
+        user_id:             { type: integer }
+        user_email:          { type: string, format: email }
+        user_name:           { type: string }
+        user_status:         { type: string, enum: [admin, basic] }
+        preferred_hechshers: { type: array, items: { type: integer } }
+
+# ── Paths ────────────────────────────────────────────────────────────────────
+paths:
+
+  /api/csrf-token:
+    get:
+      summary: Issue or refresh the CSRF token cookie
+      tags: [Auth]
+      responses:
+        '200':
+          description: CSRF token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  csrf_token: { type: string }
+
+  /api/places:
+    get:
+      summary: List places with optional filtering and proximity search
+      tags: [Places]
+      parameters:
+        - { name: q,              in: query, schema: { type: string } }
+        - { name: hechsher,       in: query, schema: { type: string } }
+        - { name: hechsher_id,    in: query, schema: { type: integer } }
+        - { name: tags[],         in: query, schema: { type: array, items: { type: string } }, explode: true }
+        - { name: radius,         in: query, schema: { type: number, default: 1 } }
+        - { name: unit,           in: query, schema: { type: string, enum: [mi, km], default: mi } }
+        - { name: lat,            in: query, schema: { type: number } }
+        - { name: lng,            in: query, schema: { type: number } }
+        - { name: location_query, in: query, schema: { type: string } }
+      responses:
+        '200':
+          description: List of matching places
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Place' } }
+                  count: { type: integer }
+        '400': { description: Invalid query, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api/hechshers/search:
+    get:
+      summary: Typeahead search for hechshers (name + alias)
+      tags: [Hechshers]
+      parameters:
+        - { name: q,     in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 10, maximum: 50 } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/HechsherSearchResult' } }
+                  count: { type: integer }
+        '422': { description: Validation error }
+
+  /api/submissions/place:
+    post:
+      summary: Submit a new place or edit (anonymous or authenticated)
+      tags: [Submissions]
+      security:
+        - csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [submission_type]
+              properties:
+                submission_type: { type: string, enum: [new_place, tag_update, edit] }
+                place_id:        { type: integer, nullable: true }
+                place_name:      { type: string }
+                street_address:  { type: string }
+                latitude:        { type: number }
+                longitude:       { type: number }
+                hechsher_ids:    { type: array, items: { type: integer } }
+                tags:            { type: array, items: { type: string } }
+                source:          { type: string, enum: [manual, location_detect] }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submission: { $ref: '#/components/schemas/Submission' }
+                  published:  { type: boolean }
+                  message:    { type: string }
+        '422': { description: Validation error }
+        '429': { description: Rate limited }
+
+  /api/places/{id}/tags:
+    post:
+      summary: Tag an existing place (anonymous or authenticated)
+      tags: [Submissions]
+      security:
+        - csrfHeader: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tags]
+              properties:
+                tags:   { type: array, items: { type: string } }
+                reason: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submission: { $ref: '#/components/schemas/Submission' }
+                  published:  { type: boolean }
+        '429': { description: Rate limited }
+
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags: [Auth]
+      security:
+        - csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, username, password]
+              properties:
+                email:    { type: string, format: email }
+                username: { type: string }
+                password: { type: string, minLength: 8 }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/AuthUser' }
+        '409': { description: Conflict (duplicate email or username) }
+        '422': { description: Validation error }
+
+  /auth/login:
+    post:
+      summary: Log in and receive JWT cookies
+      tags: [Auth]
+      security:
+        - csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:    { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Sets access_token, refresh_token, csrf_token cookies
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:    { $ref: '#/components/schemas/AuthUser' }
+                  message: { type: string }
+        '401': { description: Invalid credentials }
+
+  /auth/refresh:
+    post:
+      summary: Rotate refresh token and issue new access token
+      tags: [Auth]
+      security:
+        - cookieAuthRefresh: []
+        - csrfHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '401': { description: Token expired, invalid, or reuse detected }
+
+  /auth/logout:
+    post:
+      summary: Revoke current session
+      tags: [Auth]
+      security:
+        - cookieAuthAccess: []
+        - csrfHeader: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+
+  /auth/change-password:
+    post:
+      summary: Change password (revokes all sessions)
+      tags: [Auth]
+      security:
+        - cookieAuthAccess: []
+        - csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password:     { type: string, minLength: 8 }
+      responses:
+        '200': { description: Password changed, all sessions revoked }
+        '401': { description: Wrong current password }
+
+  /auth/account:
+    delete:
+      summary: Delete account (anonymises submissions, revokes all sessions)
+      tags: [Auth]
+      security:
+        - cookieAuthAccess: []
+        - csrfHeader: []
+      responses:
+        '200': { description: Account deleted }
+
+  /api/me/preferences/hechshers:
+    get:
+      summary: Get preferred hechshers
+      tags: [Me]
+      security:
+        - cookieAuthAccess: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hechsher_ids: { type: array, items: { type: integer } }
+    put:
+      summary: Replace preferred hechshers
+      tags: [Me]
+      security:
+        - cookieAuthAccess: []
+        - csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hechsher_ids]
+              properties:
+                hechsher_ids: { type: array, items: { type: integer } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hechsher_ids: { type: array, items: { type: integer } }
+                  message:      { type: string }
+
+  /api/me/submissions:
+    get:
+      summary: List own submissions with moderation status
+      tags: [Me]
+      security:
+        - cookieAuthAccess: []
+      parameters:
+        - { name: status,    in: query, schema: { type: string } }
+        - { name: page,      in: query, schema: { type: integer, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:     { type: array, items: { $ref: '#/components/schemas/Submission' } }
+                  count:     { type: integer }
+                  page:      { type: integer }
+                  page_size: { type: integer }
+
+  /api/admin/submissions:
+    get:
+      summary: Admin – list all submissions (filterable)
+      tags: [Admin]
+      security:
+        - cookieAuthAccess: []
+      parameters:
+        - { name: spam_filter_result,  in: query, schema: { type: string, enum: [approved, flagged] } }
+        - { name: admin_review_status, in: query, schema: { type: string, enum: [pending_review, approved, rejected] } }
+        - { name: page,                in: query, schema: { type: integer, default: 1 } }
+        - { name: page_size,           in: query, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Submission' } }
+                  count: { type: integer }
+
+  /api/admin/submissions/{id}:
+    get:
+      summary: Admin – get full submission detail
+      tags: [Admin]
+      security:
+        - cookieAuthAccess: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submission: { $ref: '#/components/schemas/Submission' }
+        '404': { description: Not found }
+
+  /api/admin/submissions/{id}/approve:
+    post:
+      summary: Admin – approve a submission
+      tags: [Admin]
+      security:
+        - cookieAuthAccess: []
+        - csrfHeader: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submission_id:       { type: integer }
+                  admin_review_status: { type: string }
+                  is_visible:          { type: boolean }
+        '409': { description: Conflict }
+
+  /api/admin/submissions/{id}/reject:
+    post:
+      summary: Admin – reject a submission
+      tags: [Admin]
+      security:
+        - cookieAuthAccess: []
+        - csrfHeader: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submission_id:       { type: integer }
+                  admin_review_status: { type: string }
+                  is_visible:          { type: boolean }
+
+tags:
+  - name: Auth
+  - name: Places
+  - name: Hechshers
+  - name: Submissions
+  - name: Me
+  - name: Admin
+

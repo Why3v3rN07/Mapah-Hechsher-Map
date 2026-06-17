@@ -1,12 +1,12 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from flask_login import LoginManager
+from flask_jwt_extended import JWTManager
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
-# Extensions are created here and initialized in the app factory.
+# Extensions are created here and initialised in the app factory.
 
-# SQLAlchemy instance (database connection and ORM)
 db = SQLAlchemy()
-# set up Flask-Migrate (database migrations)
 migrate = Migrate()
-# set up Flask-Login (user session management)
-login_manager = LoginManager()
+jwt = JWTManager()
+limiter = Limiter(key_func=get_remote_address, default_limits=[])

@@ -1,38 +1,91 @@
-from flask import Flask
+import os
+import secrets
+
+from flask import Flask, request
 from flask_cors import CORS
 
-from .config import Config
-from .extensions import db, migrate, login_manager
+from .config import config_by_name
+from .extensions import db, jwt, limiter, migrate
 
 
 def create_app(test_config: dict | None = None) -> Flask:
+    env = os.getenv("FLASK_ENV", "default")
     app = Flask(__name__)
-    CORS(app)
-    app.config.from_object(Config)
+    app.config.from_object(config_by_name.get(env, config_by_name["default"]))
 
-    # Allow tests (or other callers) to override config before extensions bind
     if test_config:
         app.config.update(test_config)
 
+    # ── Extensions ────────────────────────────────────────────────────────
+    CORS(
+        app,
+        resources={r"/*": {"origins": app.config["CORS_ORIGINS"]}},
+        supports_credentials=True,
+    )
     db.init_app(app)
     migrate.init_app(app, db)
+    jwt.init_app(app)
+    limiter.init_app(app)
 
-    # Flask-Login setup
-    login_manager.login_view = "auth.login"
-    login_manager.login_message_category = "warning"
-    login_manager.init_app(app)
+    # ── JWT token-in-blocklist callback ───────────────────────────────────
+    from .models import RefreshToken, RefreshTokenFamily, RevokedToken
 
-    from .routes import main_bp
-    app.register_blueprint(main_bp, url_prefix="/api")
+    @jwt.token_in_blocklist_loader
+    def check_if_token_revoked(jwt_header, jwt_payload):
+        jti = jwt_payload["jti"]
+        token_type = jwt_payload["type"]
 
+        # Check explicit revocation list (access tokens + manually revoked)
+        if RevokedToken.query.filter_by(jti=jti).first():
+            return True
+
+        # Refresh tokens: validate family is still active
+        if token_type == "refresh":
+            token = RefreshToken.query.filter_by(jti=jti).first()
+            if token is None:
+                return True  # unknown token
+            family = RefreshTokenFamily.query.get(token.family_id)
+            if family is None or family.revoked:
+                return True
+
+        return False
+
+    @jwt.expired_token_loader
+    def expired_token_callback(jwt_header, jwt_payload):
+        from flask import jsonify
+        return jsonify({"code": "token_expired", "message": "Token has expired"}), 401
+
+    @jwt.invalid_token_loader
+    def invalid_token_callback(error):
+        from flask import jsonify
+        return jsonify({"code": "invalid_token", "message": str(error)}), 401
+
+    @jwt.unauthorized_loader
+    def missing_token_callback(error):
+        from flask import jsonify
+        return jsonify({"code": "unauthorized", "message": str(error)}), 401
+
+    # ── Device-ID cookie (anonymous rate-limiting key) ─────────────────────
+    @app.after_request
+    def set_device_id_cookie(response):
+        if not request.cookies.get("device_id"):
+            device_id = secrets.token_urlsafe(24)
+            response.set_cookie(
+                "device_id",
+                device_id,
+                httponly=True,
+                samesite="Lax",
+                secure=not app.debug,
+                max_age=30 * 24 * 3600,
+                path="/",
+            )
+        return response
+
+    # ── Blueprints ────────────────────────────────────────────────────────
     from .auth import auth_bp
     app.register_blueprint(auth_bp, url_prefix="/auth")
 
+    from .api import api_bp
+    app.register_blueprint(api_bp, url_prefix="/api")
+
     return app
-
-
-# Flask-Login needs this to reload a user from the session
-@login_manager.user_loader
-def load_user(user_id: str):
-    from .models import Users
-    return Users.query.get(int(user_id))
