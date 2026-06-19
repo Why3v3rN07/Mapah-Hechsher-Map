@@ -18,8 +18,8 @@ class Config:
     JWT_REFRESH_COOKIE_NAME = "refresh_token"
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
-    JWT_COOKIE_SECURE = False          # overridden in ProductionConfig
-    JWT_COOKIE_SAMESITE = "Lax"
+    JWT_COOKIE_SECURE = True          # overridden in ProductionConfig
+    JWT_COOKIE_SAMESITE = "None"
     JWT_COOKIE_CSRF_PROTECT = False    # we implement CSRF ourselves
 
     # ── External Services ─────────────────────────────────────────────────
