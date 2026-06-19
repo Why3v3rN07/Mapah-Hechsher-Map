@@ -41,8 +41,8 @@ def set_csrf_cookie(response, token: str | None = None):
         CSRF_COOKIE_NAME,
         token,
         httponly=False,          # must be readable by JS
-        samesite="Lax",
-        secure=not current_app.debug,
+        samesite="None",
+        secure=True,  #not current_app.debug,
         max_age=30 * 24 * 3600,  # 30 days
         path="/",
     )
