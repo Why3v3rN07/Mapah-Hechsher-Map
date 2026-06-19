@@ -26,6 +26,15 @@ function mergeUnique(items) {
   });
 }
 
+function getItemCoordinates(item) {
+  const lat = Number(item?.lat ?? item?.latitude);
+  const lng = Number(item?.lng ?? item?.longitude);
+  return {
+    lat: Number.isFinite(lat) ? lat : null,
+    lng: Number.isFinite(lng) ? lng : null,
+  };
+}
+
 export default function UnifiedSearch({ valuePlaceName, valueLocationName, onSelectPlace, onSelectLocation, onClear }) {
   // Use location name if set, otherwise place name
   const currentValue = valueLocationName || valuePlaceName;
@@ -116,12 +125,13 @@ export default function UnifiedSearch({ valuePlaceName, valueLocationName, onSel
     if (normalized) {
       cacheRef.current.set(normalized, [item]);
     }
+    const { lat, lng } = getItemCoordinates(item);
     if (item.type === 'place') {
       setQuery(item.place_name);
-      onSelectPlace?.(item.place_name, item.lat, item.lng);
+      onSelectPlace?.(item.place_name, lat, lng);
     } else if (item.type === 'location') {
       setQuery(item.place_name);
-      onSelectLocation?.(item.place_name, item.lat, item.lng);
+      onSelectLocation?.(item.place_name, lat, lng);
     }
     setSuggestions([]);
     setOpen(false);

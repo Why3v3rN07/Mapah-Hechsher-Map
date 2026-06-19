@@ -8,8 +8,9 @@ React + Vite frontend for Mapah MVP.
 ## Setup
 
 1. Copy `.env.example` to `.env` and set `VITE_MAPBOX_TOKEN`.
-2. Install dependencies.
-3. Run dev server.
+2. For deployed environments where frontend and backend are on different domains, set `VITE_API_BASE_URL` to your backend origin (example: `https://mapah-backend.onrender.com`).
+3. Install dependencies.
+4. Run dev server.
 
 ```powershell
 npm install

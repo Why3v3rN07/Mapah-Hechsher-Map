@@ -6,6 +6,11 @@
  */
 import axios from 'axios';
 
+const rawApiBase = import.meta.env.VITE_API_BASE_URL || '/';
+const apiBase = rawApiBase.endsWith('/') && rawApiBase !== '/'
+  ? rawApiBase.slice(0, -1)
+  : rawApiBase;
+
 /** Read a cookie value by name. */
 function getCookie(name) {
   const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
@@ -13,7 +18,7 @@ function getCookie(name) {
 }
 
 const client = axios.create({
-  baseURL: '/',          // Vite proxy forwards /api and /auth to Flask
+  baseURL: apiBase,
   withCredentials: true, // include httpOnly cookies on every request
 });
 

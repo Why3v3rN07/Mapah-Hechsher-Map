@@ -17,6 +17,14 @@
   color: var(--color-primary);
   text-decoration: none;
   margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.navbar-logo {
+  height: 30px;
+  width: auto;
+  vertical-align: middle;
 }
 .navbar-actions {
   display: flex;

@@ -13,7 +13,10 @@ export default function Navbar({ onOpenAuth, onOpenSubmit }) {
 
   return (
     <nav className="navbar">
-      <Link to="/" className="navbar-brand">🗺️ Mapah</Link>
+      <Link to="/" className="navbar-brand">
+        <img src="/mapah_logo.png" alt="Mapah logo" className="navbar-logo" />
+        <span>Mapah</span>
+      </Link>
 
       <div className="navbar-actions">
         <button className="btn btn-ghost" onClick={onOpenSubmit}>
