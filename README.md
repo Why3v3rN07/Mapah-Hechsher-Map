@@ -24,9 +24,12 @@ and track moderation status. Admins can review and approve/reject submissions.
 
 - Interactive Mapbox map with markers and popup actions
 - Unified search (places + location suggestions)
-- Filtering by hechsher (including alias search), tags, and radius (`mi`/`km`)
+- Viewport-based filtering by map bounds (`bbox`) plus hechsher and tags
+- Place search by canonical name and saved aliases
+- Clustered map markers with click-to-expand behavior
 - JWT cookie auth with CSRF protection and refresh-token rotation
 - User hechsher preferences and "My Submissions" page
+- Dismissible in-app disclaimer banner about data accuracy
 - Moderated submissions for:
   - new places
   - place edits

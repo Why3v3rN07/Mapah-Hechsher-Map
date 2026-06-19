@@ -5,8 +5,9 @@ React + Vite SPA for the Mapah MVP.
 ## What it currently includes
 
 - Mapbox map with marker popups and quick actions (tag/edit)
+- Clustered marker rendering (GeoJSON source + cluster expansion on click)
 - Unified search dropdown (place results + location suggestions)
-- Filters for hechshers, tags, and proximity radius (`mi`/`km`)
+- Filters for hechshers and tags, with map-viewport-driven fetching (`bbox`)
 - Auth modal (register/login/logout) with cookie-based session flow
 - Submission modal for:
   - `new_place`
@@ -16,6 +17,7 @@ React + Vite SPA for the Mapah MVP.
 - Preferences page for saved hechshers
 - My Submissions page
 - Admin queue page (approve/reject)
+- Sticky, dismissible disclaimer snackbar for data-accuracy notice
 
 ## Setup
 

@@ -153,3 +153,33 @@ def test_new_place_accepts_coordinates_only_and_saves_aliases():
         assert {a.place_alias for a in aliases} == {"Coord Place", "CP"}
 
 
+def test_places_supports_bbox_viewport_filtering():
+    app = _make_app()
+    with app.app_context():
+        db.create_all()
+        _seed_place_with_hechsher()
+        db.session.add(
+            Places(
+                place_name="Haifa Test Place",
+                street_address="3 Port St, Haifa",
+                latitude=32.794,
+                longitude=34.989,
+                is_active=True,
+            )
+        )
+        db.session.commit()
+
+    client = app.test_client()
+
+    jerusalem_bbox = "35.10,31.70,35.30,31.85"
+    jerusalem_res = client.get(f"/api/places?bbox={jerusalem_bbox}")
+    assert jerusalem_res.status_code == 200
+    jerusalem_items = jerusalem_res.get_json()["items"]
+    assert len(jerusalem_items) == 1
+    assert jerusalem_items[0]["place_name"] == "Alias Test Place"
+
+    invalid_res = client.get("/api/places?bbox=not,a,real,bbox")
+    assert invalid_res.status_code == 400
+    assert invalid_res.get_json()["code"] == "invalid_query"
+
+

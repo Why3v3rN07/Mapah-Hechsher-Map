@@ -10,8 +10,6 @@ const DEFAULT_FILTERS = {
   q: '',
   hechshers: [],        // Array of { hechsher_id, hechsher_display_name, hechsher_symbol }
   tags: [],
-  radius: 1,
-  unit: 'mi',
   lat: null,
   lng: null,
   locationQuery: '',

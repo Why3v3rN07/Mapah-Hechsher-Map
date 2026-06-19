@@ -32,6 +32,24 @@ _MAX_RADIUS_MI = 10.0
 _MAX_RADIUS_KM = 16.09
 
 
+def _parse_bbox(value: str | None):
+    """Parse bbox query param in the format: west,south,east,north."""
+    if not value:
+        return None
+    parts = [p.strip() for p in value.split(",")]
+    if len(parts) != 4:
+        return "invalid"
+    try:
+        west, south, east, north = [float(p) for p in parts]
+    except (TypeError, ValueError):
+        return "invalid"
+    if not (-180 <= west <= 180 and -180 <= east <= 180 and -90 <= south <= 90 and -90 <= north <= 90):
+        return "invalid"
+    if south > north:
+        return "invalid"
+    return west, south, east, north
+
+
 # ── CSRF token endpoint ───────────────────────────────────────────────────────
 
 @api_bp.route("/csrf-token", methods=["GET"])
@@ -110,6 +128,11 @@ def get_places():
     lat = request.args.get("lat", type=float)
     lng = request.args.get("lng", type=float)
     location_query = request.args.get("location_query", "").strip()
+    bbox_param = request.args.get("bbox", "").strip()
+    bbox = _parse_bbox(bbox_param)
+
+    if bbox == "invalid":
+        return error_response("invalid_query", "bbox must be west,south,east,north", 400)
 
     if unit not in ("mi", "km"):
         return error_response("invalid_query", "unit must be 'mi' or 'km'", 400)
@@ -167,9 +190,29 @@ def get_places():
             .distinct()
         )
 
-    # Name search
+    # Name and alias search
     if q:
-        query = query.filter(Places.place_name.ilike(f"%{q}%"))
+        query = (
+            query.outerjoin(PlaceAliases, Places.place_id == PlaceAliases.place_id)
+            .filter(
+                or_(
+                    Places.place_name.ilike(f"%{q}%"),
+                    PlaceAliases.place_alias.ilike(f"%{q}%"),
+                )
+            )
+            .distinct()
+        )
+
+    # Optional viewport filter to avoid returning off-screen points.
+    if bbox:
+        west, south, east, north = bbox
+        query = query.filter(Places.latitude.isnot(None), Places.longitude.isnot(None))
+        query = query.filter(Places.latitude >= south, Places.latitude <= north)
+        if west <= east:
+            query = query.filter(Places.longitude >= west, Places.longitude <= east)
+        else:
+            # Antimeridian-crossing viewport.
+            query = query.filter(or_(Places.longitude >= west, Places.longitude <= east))
 
     # Tag filter
     for tag in tags:

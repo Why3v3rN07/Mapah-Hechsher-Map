@@ -1,0 +1,63 @@
+.disclaimer-snackbar {
+  position: sticky;
+  top: 0;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background-color: #fbbf24;
+  border-bottom: 2px solid #f59e0b;
+  padding: 10px 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.disclaimer-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #78350f;
+  line-height: 1.4;
+  margin: 0;
+  flex: 1;
+}
+
+.disclaimer-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: #78350f;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease;
+}
+
+.disclaimer-close:hover {
+  opacity: 0.7;
+}
+
+.disclaimer-close:active {
+  opacity: 0.5;
+}
+
+@media (max-width: 640px) {
+  .disclaimer-snackbar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .disclaimer-text {
+    font-size: 13px;
+  }
+
+  .disclaimer-close {
+    font-size: 16px;
+    padding: 2px 6px;
+  }
+}
+
+

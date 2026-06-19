@@ -1,6 +1,6 @@
 # Mapah Product + Technical Spec (Spec-Driven Development)
 
-_Last updated from implemented codebase on 2026-06-17._
+_Last updated from implemented codebase on 2026-06-19._
 
 ## 1) Purpose
 Mapah helps users find nearby places to eat based on kosher certifications (hechshers) they follow.
@@ -11,15 +11,17 @@ This spec is the source of truth for implementation planning and acceptance.
 
 ### MVP (In Scope)
 - View a Mapbox map with place markers showing hechsher symbols as icons.
+- Marker rendering is clustered at lower zoom levels with click-to-expand behavior.
 - Map defaults to Jerusalem (31.7683°N, 35.2137°E) if location services unavailable.
 - Click on map location to center and zoom; map interaction includes marker clicking.
 - Unified search dropdown combines place results and typed-location suggestions.
 - Search/filter places by:
   - hechsher (searchable dropdown with icon + alias matching, multi-select)
-  - place name
+  - place name (including place aliases)
   - place tags
-  - proximity radius from map center or typed location
+  - current visible map viewport (`bbox`)
 - Reset Filters button to clear all active filters including hechshers.
+- Sticky dismissible disclaimer banner is shown near the top of the app shell.
 - Account system with JWT auth.
 - Logged-in users can save preferred hechshers via dedicated preferences page.
 - Map defaults:
@@ -94,9 +96,10 @@ This spec is the source of truth for implementation planning and acceptance.
 2. If location permission granted, map centers on user location.
 3. If denied/unavailable, map defaults to center on Jerusalem (31.7683°N, 35.2137°E).
 4. Place markers are shown for places matching active filters.
-5. Marker icons display the hechsher symbol (icon) for each place's primary hechsher.
-6. Clicking on a map location (but not on a marker) centers and zooms the map to that location.
-7. When user selects a suggestion from the search dropdown, the map centers on and zooms to that location.
+5. Marker clustering is enabled; clicking a cluster zooms into that cluster.
+6. Marker icons display a custom map pin with popup details on click.
+7. Clicking on a map location (but not on a marker) centers and zooms the map to that location.
+8. When user selects a suggestion from the search dropdown, the map centers on and zooms to that location.
 
 ### 5.2 Search and Filter
 1. Hechsher filter supports multiple selections (multi-select dropdown).
@@ -104,20 +107,14 @@ This spec is the source of truth for implementation planning and acceptance.
    - hechsher display name
    - any hechsher alias
 3. Hechsher suggestions show display name and icon.
-4. Place search supports name, tags, and proximity radius.
+4. Place search supports name (including aliases), tags, and viewport bounds.
 5. Frontend search UX is a unified place+location typeahead dropdown.
-6. Proximity search supports both:
-   - current location + radius
-   - typed location + radius
+6. Frontend map fetches places with `bbox=west,south,east,north` from current map bounds.
 7. Places can have multiple hechshers.
-8. Radius units are user-switchable between miles and kilometers.
-9. Default radius is 1 mile.
-10. Maximum radius is 10 miles (16.09 km when unit is km).
-11. Backend clamps oversized radius values to the configured maximum.
-12. `GET /api/places` accepts both `tags[]` and `tags` query key variants.
-13. Typed location suggestions are available from `GET /api/locations/search`.
-14. Search radius is calculated from the center of the visible map (not from current user location, unless user just loaded the page).
-15. A "Reset Filters" button clears all active filters, including selected hechshers, search query, tags, and radius.
+8. `GET /api/places` accepts both `tags[]` and `tags` query key variants.
+9. Typed location suggestions are available from `GET /api/locations/search`.
+10. Backend supports optional compatibility proximity parameters (`radius`, `unit`, `lat/lng`, `location_query`) and clamps oversized radius values.
+11. A "Reset Filters" button clears all active filters, including selected hechshers, search query, tags, and selected location.
 
 ### 5.3 Preferences
 1. Authenticated users can save preferred hechshers via the preferences page.
@@ -220,19 +217,15 @@ Acceptance criteria:
 - User can select multiple hechshers to filter by.
 - Selecting hechshers updates map markers to show places with any of the selected hechshers.
 
-### US-03 Search by name/tag/proximity
-As a user, I want to search places by name, tags, and distance.
+### US-03 Search by name/tag/viewport
+As a user, I want to search places by name, tags, and map area.
 
 Acceptance criteria:
 - Search by place name returns matching places.
+- Search by place alias returns the canonical place.
 - Search by tag (e.g., `meat`, `dairy`, `bakery`) filters results.
-- Radius search works with current location.
-- Radius search works with typed location.
-- Radius units are switchable between mi/km.
-- Default radius is 1 mile.
-- Maximum radius is 10 miles (16.09 km).
-- Radius is calculated from the center of the visible map.
-- Reset Filters button clears all active filters including hechshers, search query, tags, and radius.
+- Panning/zooming the map refreshes data for the current viewport via `bbox`.
+- Reset Filters button clears all active filters including hechshers, search query, tags, and selected location.
 
 ### US-04 Create account and save preferences
 As a user, I want to create an account and save preferred hechshers.
@@ -428,7 +421,8 @@ Retention behavior:
 - `GET /api/csrf-token`
   - issues/refreshes CSRF cookie and returns `csrf_token`
 - `GET /api/places`
-  - supports filters: `hechsher`, `hechsher_id`, `q`, `tags[]|tags`, `radius`, `unit=mi|km`, `lat/lng` or `location_query`
+  - supports filters: `hechsher`, `hechsher_id`, `q`, `tags[]|tags`, `bbox`
+  - also supports compatibility proximity params: `radius`, `unit=mi|km`, `lat/lng` or `location_query`
   - when authenticated and no hechsher filter is passed, defaults to preferred hechshers
 - `GET /api/hechshers/search?q=`
   - returns canonical hechshers by name/alias with icon
@@ -579,12 +573,13 @@ The following contract is normative for MVP implementation.
 
 `GET /api/places`
 - Query params:
-  - `q` string (place name / free text)
+  - `q` string (place name / place alias / free text)
   - `hechsher` string or `hechsher_id` int
   - `tags[]` enum array (backend also accepts `tags`)
-  - `radius` number
-  - `unit` enum: `mi|km`
-  - `lat`, `lng` numbers OR `location_query` string
+  - `bbox` string as `west,south,east,north`
+  - `radius` number (compatibility mode)
+  - `unit` enum: `mi|km` (compatibility mode)
+  - `lat`, `lng` numbers OR `location_query` string (compatibility mode)
 - `200` response:
 ```json
 {

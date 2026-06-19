@@ -9,6 +9,12 @@ It provides:
 - moderated submission pipeline (`new_place`, `edit`, `tag_update`, `alias_update`, `hechsher_create`)
 - admin moderation queue (`/api/admin/submissions*`)
 
+Recent `GET /api/places` behavior updates:
+
+- supports optional viewport filtering via `bbox=west,south,east,north`
+- supports place alias matching in `q` searches (name + alias)
+- validates malformed `bbox` with `400 invalid_query`
+
 ## Stack
 
 - Flask 3

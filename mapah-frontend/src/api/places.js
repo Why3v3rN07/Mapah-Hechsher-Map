@@ -2,7 +2,7 @@ import client from './client';
 import axios from 'axios';
 
 /**
- * @param {Object} params – q, hechsher, hechsher_id, tags, radius, unit, lat, lng, location_query
+ * @param {Object} params – q, hechsher, hechsher_id, tags, bbox
  */
 export const getPlaces = async (params = {}) => {
   try {

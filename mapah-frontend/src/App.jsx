@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import Navbar from './components/Layout/Navbar';
+import Disclaimer from './components/Layout/Disclaimer';
 import AuthModal from './components/Auth/AuthModal';
 import SubmissionModal from './components/Submission/SubmissionModal';
 import HomePage from './pages/HomePage';
@@ -45,6 +46,7 @@ function App() {
         onOpenAuth={() => setAuthOpen(true)}
         onOpenSubmit={() => openSubmission('new_place', null)}
       />
+      <Disclaimer />
 
       <Routes>
         <Route
