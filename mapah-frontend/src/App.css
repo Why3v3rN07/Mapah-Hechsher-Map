@@ -1,1 +1,6 @@
 /* App-level extras (global tokens/utility classes live in index.css). */
+
+.app-main {
+  flex: 1;
+}
+

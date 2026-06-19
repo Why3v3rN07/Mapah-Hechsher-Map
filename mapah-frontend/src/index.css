@@ -8,6 +8,7 @@
   --color-primary-dark: #1e40af;
   --color-primary-light: #dbeafe;
   --navbar-height: 64px;
+  --app-header-height: var(--navbar-height);
 
   font-family: Inter, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.4;

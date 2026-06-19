@@ -1,6 +1,5 @@
 .navbar {
-  position: fixed;
-  top: 0; left: 0; right: 0;
+  position: relative;
   height: var(--navbar-height);
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);

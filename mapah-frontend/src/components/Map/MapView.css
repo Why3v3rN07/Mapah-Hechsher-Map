@@ -1,7 +1,6 @@
 .map-container {
   width: 100%;
-  height: calc(100vh - var(--navbar-height));
-  margin-top: var(--navbar-height);
+  height: calc(100vh - var(--app-header-height, var(--navbar-height)));
 }
 
 
