@@ -113,7 +113,7 @@ def register():
     db.session.commit()
 
     csrf_token = generate_csrf_token()
-    response, status = success({"user": user.to_dict()}, 201)
+    response, status = success({"user": user.to_dict(), "csrf_token": csrf_token}, 201)
     _set_auth_cookies(response, access_token, refresh_token, csrf_token)
     return response, status
 
@@ -133,7 +133,7 @@ def login():
     db.session.commit()
 
     csrf_token = generate_csrf_token()
-    response, status = success({"user": user.to_dict(), "message": "Logged in"})
+    response, status = success({"user": user.to_dict(), "message": "Logged in", "csrf_token": csrf_token})
     _set_auth_cookies(response, access_token, refresh_token, csrf_token)
     return response, status
 
@@ -177,9 +177,11 @@ def refresh():
     access_token, new_refresh_token, _ = _issue_token_pair(user_id, family_id=token_record.family_id)
     db.session.commit()
 
-    response, status = success({"message": "Token refreshed"})
+    new_csrf = generate_csrf_token()
+    response, status = success({"message": "Token refreshed", "csrf_token": new_csrf})
     set_access_cookies(response, access_token)
     set_refresh_cookies(response, new_refresh_token)
+    set_csrf_cookie(response, new_csrf)
     return response, status
 
 

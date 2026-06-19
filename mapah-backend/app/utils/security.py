@@ -41,8 +41,8 @@ def set_csrf_cookie(response, token: str | None = None):
         CSRF_COOKIE_NAME,
         token,
         httponly=False,          # must be readable by JS
-        samesite="None",
-        secure=True,  #not current_app.debug,
+        samesite=current_app.config.get("CSRF_COOKIE_SAMESITE", "Lax"),
+        secure=current_app.config.get("CSRF_COOKIE_SECURE", not current_app.debug),
         max_age=30 * 24 * 3600,  # 30 days
         path="/",
     )
@@ -50,14 +50,23 @@ def set_csrf_cookie(response, token: str | None = None):
 
 
 def require_csrf(f):
-    """Decorator: validate the double-submit CSRF token on state-changing requests."""
+    """Decorator: validate the CSRF token on state-changing requests.
+
+    Two modes:
+    - Same-origin / local dev: cookie + header both present → must match (strict double-submit).
+    - Cross-origin / prod (e.g. Render split deploy): third-party cookies are blocked by
+      browsers so cookie will be absent.  In that case we trust CORS + the presence of the
+      custom header (browsers cannot attach custom headers on cross-origin requests without
+      a preflight that our CORS config blocks for disallowed origins).
+    """
     @wraps(f)
     def decorated(*args, **kwargs):
         cookie_val = request.cookies.get(CSRF_COOKIE_NAME)
         header_val = request.headers.get(CSRF_HEADER_NAME)
-        if not cookie_val or not header_val:
+        if not header_val:
             return error_response("csrf_missing", "CSRF token required", 403)
-        if not hmac.compare_digest(cookie_val, header_val):
+        # Only do double-submit comparison when cookie is actually present.
+        if cookie_val and not hmac.compare_digest(cookie_val, header_val):
             return error_response("csrf_invalid", "Invalid CSRF token", 403)
         return f(*args, **kwargs)
     return decorated

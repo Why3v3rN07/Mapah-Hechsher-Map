@@ -18,9 +18,13 @@ class Config:
     JWT_REFRESH_COOKIE_NAME = "refresh_token"
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
-    JWT_COOKIE_SECURE = True          # overridden in ProductionConfig
-    JWT_COOKIE_SAMESITE = "None"
+    JWT_COOKIE_SECURE = os.getenv("JWT_COOKIE_SECURE", "false").lower() == "true"
+    JWT_COOKIE_SAMESITE = os.getenv("JWT_COOKIE_SAMESITE", "Lax")
     JWT_COOKIE_CSRF_PROTECT = False    # we implement CSRF ourselves
+
+    # CSRF double-submit cookie policy (separate from flask-jwt cookie policy)
+    CSRF_COOKIE_SECURE = os.getenv("CSRF_COOKIE_SECURE", "false").lower() == "true"
+    CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax")
 
     # ── External Services ─────────────────────────────────────────────────
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
@@ -62,12 +66,18 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    JWT_COOKIE_SECURE = False
+    JWT_COOKIE_SECURE = os.getenv("JWT_COOKIE_SECURE", "false").lower() == "true"
+    JWT_COOKIE_SAMESITE = os.getenv("JWT_COOKIE_SAMESITE", "Lax")
+    CSRF_COOKIE_SECURE = os.getenv("CSRF_COOKIE_SECURE", "false").lower() == "true"
+    CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "Lax")
 
 
 class ProductionConfig(Config):
     DEBUG = False
-    JWT_COOKIE_SECURE = True
+    JWT_COOKIE_SECURE = os.getenv("JWT_COOKIE_SECURE", "true").lower() == "true"
+    JWT_COOKIE_SAMESITE = os.getenv("JWT_COOKIE_SAMESITE", "None")
+    CSRF_COOKIE_SECURE = os.getenv("CSRF_COOKIE_SECURE", "true").lower() == "true"
+    CSRF_COOKIE_SAMESITE = os.getenv("CSRF_COOKIE_SAMESITE", "None")
 
 
 config_by_name = {

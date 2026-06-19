@@ -1,6 +1,8 @@
 /**
  * Axios instance with:
- *  - CSRF double-submit cookie header injected on state-changing requests
+ *  - CSRF token header injected on state-changing requests
+ *    (reads from localStorage first, then cookie — supports cross-origin Render deploy
+ *     where third-party cookies are blocked by browsers)
  *  - Transparent access-token refresh on 401 (single-retry)
  *  - auth:expired event dispatched when refresh fails (picked up by AuthContext)
  */
@@ -11,29 +13,47 @@ const apiBase = rawApiBase.endsWith('/') && rawApiBase !== '/'
   ? rawApiBase.slice(0, -1)
   : rawApiBase;
 
-/** Read a cookie value by name. */
+// ── CSRF token storage ────────────────────────────────────────────────────────
+const CSRF_STORAGE_KEY = 'mapah_csrf_token';
+
+/** Called by auth.js whenever a response body contains a fresh csrf_token. */
+export function storeCsrfToken(token) {
+  if (token) localStorage.setItem(CSRF_STORAGE_KEY, token);
+}
+
+/** Read a cookie by name (works on same-origin / local dev). */
 function getCookie(name) {
   const match = document.cookie.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]*)'));
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+/**
+ * Best-effort CSRF token:
+ *   1. localStorage  — set by getCsrfToken/login/register/refresh responses (cross-origin safe)
+ *   2. cookie        — fallback for local dev where same-origin cookie works
+ */
+function readCsrfToken() {
+  return localStorage.getItem(CSRF_STORAGE_KEY) || getCookie('csrf_token');
+}
+
+// ── Axios instance ────────────────────────────────────────────────────────────
 const client = axios.create({
   baseURL: apiBase,
-  withCredentials: true, // include httpOnly cookies on every request
+  withCredentials: true,
 });
 
-// ── Request interceptor: attach CSRF token ────────────────────────────────
+// ── Request interceptor: attach CSRF token ────────────────────────────────────
 const STATE_CHANGING = ['post', 'put', 'patch', 'delete'];
 
 client.interceptors.request.use((config) => {
   if (STATE_CHANGING.includes(config.method?.toLowerCase())) {
-    const csrf = getCookie('csrf_token');
+    const csrf = readCsrfToken();
     if (csrf) config.headers['X-CSRF-Token'] = csrf;
   }
   return config;
 });
 
-// ── Response interceptor: auto-refresh on 401 ────────────────────────────
+// ── Response interceptor: auto-refresh on 401 ────────────────────────────────
 let _refreshing = false;
 let _waitQueue = [];
 
@@ -70,7 +90,6 @@ client.interceptors.response.use(
         return client(orig);
       } catch (refreshErr) {
         processQueue(refreshErr);
-        // Notify the app that the session is gone
         window.dispatchEvent(new CustomEvent('auth:expired'));
         return Promise.reject(refreshErr);
       } finally {
@@ -83,4 +102,3 @@ client.interceptors.response.use(
 );
 
 export default client;
-
