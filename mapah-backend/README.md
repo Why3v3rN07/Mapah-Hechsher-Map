@@ -1,33 +1,52 @@
 # Mapah Backend
 
-Flask API for Mapah MVP (JWT auth, moderation pipeline, submissions, admin queue).
+Flask API for the Mapah MVP.
+
+It provides:
+
+- cookie-based JWT auth (`/auth/*`) with refresh rotation + CSRF double-submit
+- map/search APIs (`/api/places`, `/api/locations/search`, `/api/hechshers*`)
+- moderated submission pipeline (`new_place`, `edit`, `tag_update`, `alias_update`, `hechsher_create`)
+- admin moderation queue (`/api/admin/submissions*`)
+
+## Stack
+
+- Flask 3
+- Flask-SQLAlchemy + Flask-Migrate (Alembic)
+- Flask-JWT-Extended
+- Flask-Limiter
+- PostgreSQL (default)
+- Anthropic SDK (moderation)
+- `requests` (Mapbox geocoding)
 
 ## Setup
 
-1. Copy `.env.example` to `.env` and fill required values.
-2. Install dependencies.
+Install dependencies:
 
 ```powershell
+Set-Location C:\Users\littl\PycharmProjects\Mapah-Hechsher-Map\mapah-backend
 python -m pip install -r requirements.txt
 ```
 
-### AI moderation settings
+Configure environment variables (there is no committed `.env.example` in this repo).
 
-New place submissions are moderated through the Anthropics Messages API.
+Minimum practical vars for local development:
 
-- `ANTHROPIC_API_KEY` – required to enable live AI moderation
-- `ANTHROPIC_MODERATION_MODEL` – optional, defaults to `claude-sonnet-4-5`
-- `ANTHROPIC_MODERATION_FALLBACK_MODELS` – optional comma-separated fallback list
-- `ANTHROPIC_MODERATION_MAX_TOKENS` – optional, defaults to `200`
-- `ANTHROPIC_AUTO_APPROVE_WITHOUT_KEY` – optional, defaults to `false`
+- `DATABASE_URL`
+- `SECRET_KEY`
+- `JWT_SECRET_KEY`
 
-If `ANTHROPIC_API_KEY` is missing, submissions are fail-closed (flagged) outside tests.
-In test mode, moderation is bypassed unless you explicitly set an API key.
-If a configured model is unavailable, the backend automatically retries fallback models.
+Common optional vars:
 
-## Migrations + Upgrade Script
+- `CORS_ORIGINS`
+- `MAPBOX_SECRET_TOKEN`
+- `ANTHROPIC_API_KEY`
+- `HECHSHER_UPLOAD_DIR`
+- `PORT` (defaults to `5000`)
 
-Run Alembic upgrade safely (with schema verification + recovery):
+## Database migrations
+
+Run safe upgrade helper:
 
 ```powershell
 python scripts/db_upgrade.py
@@ -36,71 +55,110 @@ python scripts/db_upgrade.py
 PowerShell wrapper:
 
 ```powershell
-./scripts/db_upgrade.ps1
+.\scripts\db_upgrade.ps1
 ```
 
-Upgrade + reseed from scratch:
+Upgrade and reseed from scratch:
 
 ```powershell
 python scripts/db_upgrade.py --seed --wipe
 ```
 
-## Seed Data
+## Seed data
 
-The seed script creates:
-- admin + basic users
-- hechshers + aliases
-- sample places + tags + place-hechsher links
-- user preferred hechshers
-- sample submission moderation history
+`seed.py` can populate users, hechshers, places, preferences, and submission history.
 
-Run without wipe:
+Run:
 
 ```powershell
 python seed.py
 ```
 
-Run with wipe:
+Wipe and reseed:
 
 ```powershell
 python seed.py --wipe
 ```
 
-Run with automatic migration upgrade first:
+Auto-upgrade then wipe+seed:
 
 ```powershell
 python seed.py --auto-upgrade --wipe
 ```
 
-## Tests
+Default seeded users:
 
-Smoke + E2E happy-path tests:
+- `admin@mapah.local` / `AdminPass123!`
+- `yael@mapah.local` / `YaelPass123!`
+- `david@mapah.local` / `DavidPass123!`
+- `sarah@mapah.local` / `SarahPass123!`
+- `moshe@mapah.local` / `MoshePass123!`
 
-```powershell
-python -m pytest -q
-```
-
-The E2E test file is `tests/test_e2e_happy_path.py` and covers:
-1. register
-2. login
-3. submit new place
-4. admin queue fetch
-5. admin approval
-
-## Run Server
+## Run
 
 ```powershell
 python run.py
 ```
 
-Server default: `http://localhost:5000`
+Defaults:
 
-## Key files
+- host: `0.0.0.0`
+- port: `5000` (or `PORT` / `FLASK_RUN_PORT`)
 
-- `app/__init__.py` - app factory + extensions + JWT callbacks
-- `app/models.py` - target MVP data model
-- `app/auth/views.py` - auth/session endpoints
-- `app/api/` - public/auth/admin API routes
-- `migrations/` - Alembic migration history
-- `scripts/db_upgrade.py` - migration/upgrade helper
-- `openapi.yaml` - OpenAPI 3.1 contract
+## Moderation behavior
+
+- Uses Anthropic via `app/services/moderation.py`
+- Adds deterministic anti-spam heuristics and consistency checks
+- Missing `ANTHROPIC_API_KEY`:
+  - in tests (or with `ANTHROPIC_AUTO_APPROVE_WITHOUT_KEY=true`): auto-approve
+  - otherwise: fail-closed to `flagged`
+- Supports model fallback chain via `ANTHROPIC_MODERATION_FALLBACK_MODELS`
+
+## API groups
+
+- Public:
+  - `GET /api/csrf-token`
+  - `GET /api/places`
+  - `GET /api/locations/search`
+  - `GET /api/hechshers`
+  - `GET /api/hechshers/search`
+  - `POST /api/submissions/place`
+  - `POST /api/places/{id}/tags`
+  - `GET /api/places/{id}/aliases`
+  - `POST /api/places/{id}/aliases` (auth required)
+  - `POST /api/hechshers`
+- Auth:
+  - `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`
+  - `POST /auth/change-password`, `DELETE /auth/account`
+- User:
+  - `GET/PUT /api/me/preferences/hechshers`
+  - `GET /api/me/submissions`
+- Admin:
+  - `GET /api/admin/submissions`
+  - `GET /api/admin/submissions/{id}`
+  - `POST /api/admin/submissions/{id}/approve`
+  - `POST /api/admin/submissions/{id}/reject`
+
+## Tests
+
+```powershell
+python -m pytest -q
+```
+
+Current test files:
+
+- `tests/test_app_smoke.py`
+- `tests/test_e2e_happy_path.py`
+- `tests/test_spec_gap_fixes.py`
+- `tests/test_submission_moderation.py`
+
+## Key paths
+
+- `app/__init__.py` - app factory, CORS, JWT callbacks, blueprints
+- `app/models.py` - SQLAlchemy models/enums
+- `app/auth/views.py` - auth/session routes
+- `app/api/` - places, hechshers, submissions, me, admin
+- `app/services/geocoding.py` - Mapbox geocoding helpers
+- `app/services/moderation.py` - moderation integration and heuristics
+- `migrations/versions/` - Alembic revisions
+- `openapi.yaml` - API contract document

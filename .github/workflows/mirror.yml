@@ -28,7 +28,7 @@ jobs:
 
       - name: Push all branches (non-destructive)
         run: |
-          git push classrepo --all
+          git push classrepo
 
       - name: Push all tags (non-destructive)
         run: |

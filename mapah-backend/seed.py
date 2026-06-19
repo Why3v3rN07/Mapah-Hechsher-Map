@@ -8,6 +8,7 @@ from app.extensions import db
 from app.models import (
     HechsherAliases,
     Hechshers,
+    PlaceAliases,
     PlaceHechshers,
     Places,
     PlaceTags,
@@ -26,6 +27,7 @@ REQUIRED_TABLES = {
     "hechshers",
     "hechsher_aliases",
     "places",
+    "place_aliases",
     "place_tags",
     "place_hechshers",
     "user_preferred_hechshers",
@@ -69,6 +71,7 @@ def wipe_seed_tables() -> None:
     db.session.query(UserPreferredHechshers).delete()
     db.session.query(PlaceHechshers).delete()
     db.session.query(PlaceTags).delete()
+    db.session.query(PlaceAliases).delete()
     db.session.query(HechsherAliases).delete()
     db.session.query(Places).delete()
     db.session.query(Hechshers).delete()
@@ -81,102 +84,236 @@ def has_seed_data() -> bool:
 
 
 def seed_data() -> None:
-    # --- Users
-    admin = Users(user_email="admin@mapah.local", user_name="admin", user_status="admin")
-    admin.set_password("AdminPass123!")
-
-    contributor = Users(
-        user_email="contributor@mapah.local",
-        user_name="contributor",
-        user_status="basic",
-    )
-    contributor.set_password("ContributorPass123!")
-
-    viewer = Users(user_email="viewer@mapah.local", user_name="viewer", user_status="basic")
-    viewer.set_password("ViewerPass123!")
-
-    db.session.add_all([admin, contributor, viewer])
+    # --- Users (4 basic + 1 admin)
+    users = {
+        "admin": Users(user_email="admin@mapah.local", user_name="admin", user_status="admin"),
+        "yael": Users(user_email="yael@mapah.local", user_name="yael", user_status="basic"),
+        "david": Users(user_email="david@mapah.local", user_name="david", user_status="basic"),
+        "sarah": Users(user_email="sarah@mapah.local", user_name="sarah", user_status="basic"),
+        "moshe": Users(user_email="moshe@mapah.local", user_name="moshe", user_status="basic"),
+    }
+    user_passwords = {
+        "admin": "AdminPass123!",
+        "yael": "YaelPass123!",
+        "david": "DavidPass123!",
+        "sarah": "SarahPass123!",
+        "moshe": "MoshePass123!",
+    }
+    for key, user in users.items():
+        user.set_password(user_passwords[key])
+    db.session.add_all(list(users.values()))
     db.session.flush()
 
-    # --- Hechshers + aliases
-    hechshers = {
-        "rabbinate_jerusalem": Hechshers(
-            hechsher_display_name="רבנות ירושלים",
-            hechsher_symbol="/icons/rabbinate_jerusalem.png",
-        ),
-        "badatz": Hechshers(
-            hechsher_display_name="בד\"ץ העדה החרדית",
-            hechsher_symbol="/icons/badatz.png",
-        ),
-        "tzohar": Hechshers(
-            hechsher_display_name="צהר",
-            hechsher_symbol="/icons/tzohar.png",
-        ),
-        "beit_yosef": Hechshers(
-            hechsher_display_name="מהדרין בית יוסף",
-            hechsher_symbol="/icons/beit_yosef.png",
-        ),
-        "tel_aviv_rabbinate": Hechshers(
-            hechsher_display_name="רבנות תל אביב",
-            hechsher_symbol="/icons/rabbinate_tlv.png",
-        ),
+    # --- Hechshers + aliases (Israel in Hebrew, NY in English)
+    hechsher_specs = {
+        # Israeli hechshers
+        "rabanut_jerusalem": ("רבנות ירושלים", "/icons/rabanut_jerusalem.png", ["Jerusalem Rabbinate", "Jerusalem Rabbanut"]),
+        "rabanut_tlv": ("רבנות תל אביב", "/icons/rabanut_tlv.png", ["Tel Aviv Rabbinate", "Tel Aviv Rabbanut"]),
+        "rabanut_haifa": ("רבנות חיפה", "/icons/rabanut_haifa.png", ["Haifa Rabbinate"]),
+        "rabanut_beer_sheva": ("רבנות באר שבע", "/icons/rabanut_beer_sheva.png", ["Beer Sheva Rabbinate"]),
+        "badatz_eda": ("בד\"ץ העדה החרדית", "/icons/badatz_eda.png", ["Badatz", "Eda Haredit"]),
+        "landau": ("הרב לנדא", "/icons/landau.png", ["Rav Landau", "Landau"]),
+        "sheerit": ("שארית ישראל", "/icons/sheerit.png", ["Sheerit Yisrael"]),
+        "beit_yosef": ("מהדרין בית יוסף", "/icons/beit_yosef.png", ["Beit Yosef", "Mehadrin Beit Yosef"]),
+        "tzohar": ("צהר", "/icons/tzohar.png", ["Tzohar"]),
+        "rubin": ("רובין", "/icons/rubin.png", ["Rubin"]),
+        "mahpud": ("בד\"ץ יורה דעה הרב מחפוד", "/icons/mahpud.png", ["Machpud", "Mahpud"]),
+        "petah_tikva_rabanut": ("רבנות פתח תקווה", "/icons/rabanut_pt.png", ["Petah Tikva Rabbinate"]),
+        # American hechshers
+        "ou": ("OU Kosher", "/icons/ou.png", ["OU", "Orthodox Union"]),
+        "ok": ("OK Kosher", "/icons/ok.png", ["OK"]),
+        "kofk": ("Kof-K", "/icons/kofk.png", ["Kof K"]),
+        "stark": ("Star-K", "/icons/stark.png", ["Star K"]),
+        "crc": ("cRc", "/icons/crc.png", ["CRC", "Chicago Rabbinical Council"]),
+        "trianglek": ("Triangle K", "/icons/trianglek.png", ["TriangleK"]),
+        "scrollk": ("Scroll K", "/icons/scrollk.png", ["ScrollK"]),
+        "earthkosher": ("EarthKosher", "/icons/earthkosher.png", ["Earth Kosher"]),
+        "tabletk": ("Tablet-K", "/icons/tabletk.png", ["Tablet K"]),
+        "queens_vaad": ("Queens Vaad", "/icons/queens_vaad.png", ["KVH", "Vaad Harabonim of Queens"]),
     }
 
-    db.session.add_all(list(hechshers.values()))
+    hechshers = {}
+    for key, (display_name, symbol, aliases) in hechsher_specs.items():
+        hechsher = Hechshers(hechsher_display_name=display_name, hechsher_symbol=symbol)
+        db.session.add(hechsher)
+        hechshers[key] = hechsher
     db.session.flush()
 
-    db.session.add_all(
-        [
-            HechsherAliases(hechsher_id=hechshers["rabbinate_jerusalem"].hechsher_id, hechsher_alias="Rabbanut Jerusalem"),
-            HechsherAliases(hechsher_id=hechshers["rabbinate_jerusalem"].hechsher_id, hechsher_alias="Rabanut Jerusalem"),
-            HechsherAliases(hechsher_id=hechshers["badatz"].hechsher_id, hechsher_alias="Badatz"),
-            HechsherAliases(hechsher_id=hechshers["badatz"].hechsher_id, hechsher_alias="Eda Haredit"),
-            HechsherAliases(hechsher_id=hechshers["tzohar"].hechsher_id, hechsher_alias="Tzohar"),
-            HechsherAliases(hechsher_id=hechshers["beit_yosef"].hechsher_id, hechsher_alias="Mehadrin Beit Yosef"),
-            HechsherAliases(hechsher_id=hechshers["tel_aviv_rabbinate"].hechsher_id, hechsher_alias="רבנות ת\"א"),
-        ]
-    )
+    for key, (_, _, aliases) in hechsher_specs.items():
+        for alias in aliases:
+            db.session.add(
+                HechsherAliases(
+                    hechsher_id=hechshers[key].hechsher_id,
+                    hechsher_alias=alias,
+                )
+            )
 
     # --- Preferences
-    db.session.add_all(
-        [
-            UserPreferredHechshers(user_id=contributor.user_id, hechsher_id=hechshers["badatz"].hechsher_id),
-            UserPreferredHechshers(user_id=contributor.user_id, hechsher_id=hechshers["beit_yosef"].hechsher_id),
-            UserPreferredHechshers(user_id=viewer.user_id, hechsher_id=hechshers["rabbinate_jerusalem"].hechsher_id),
-        ]
-    )
-
-    # --- Places (Hebrew display names across multiple cities)
-    # Edge cases included:
-    # - duplicate display name in different cities
-    # - inactive place
-    # - place with no coordinates
-    # - place with no tags
-    # - place with no hechsher
-    place_specs = {
-        "falafel_hakosem": ("פלאפל הקוסם", "שלמה המלך 1, תל אביב", 32.0700, 34.7760, True),
-        "machneyuda": ("מחניודה", "בית יעקב 10, ירושלים", 31.7834, 35.2160, True),
-        "carmel_bakery": ("מאפיית הכרמל", "הרצל 45, חיפה", 32.7940, 34.9896, True),
-        "neve_tzedek_cafe": ("קפה נווה צדק", "שבזי 30, תל אביב", 32.0629, 34.7686, True),
-        "hatikva_shawarma": ("שווארמה התקווה", "דרך ההגנה 55, תל אביב", 32.0550, 34.7950, True),
-        "yarkon_market": ("מרכז הירקון מרקט", "אבן גבירול 150, תל אביב", 32.0905, 34.7818, True),
-        "geula_pastry": ("קונדיטוריית גאולה", "יפו 85, ירושלים", 31.7857, 35.2118, True),
-        "carmel_deli": ("מעדניית הכרמל", "הנביאים 12, חיפה", 32.8150, 34.9980, True),
-        "hagefen_cafe": ("בית קפה הגפן", "הנשיא 25, באר שבע", 31.2520, 34.7915, True),
-        "old_city_bakery": ("מאפיית העיר העתיקה", "רחוב דוד 3, ירושלים", 31.7766, 35.2297, True),
-        "eilat_fish": ("דגי אילת", "שדרות התמרים 9, אילת", 29.5581, 34.9482, True),
-        "tiberias_grill": ("הגריל הטברייני", "הבנים 4, טבריה", 32.7922, 35.5312, True),
-        "haifa_cafe_roman": ("קפה הכרמל", "שדרות מוריה 112, חיפה", 32.8008, 34.9851, True),
-        "jerusalem_cafe_same_name": ("קפה הכרמל", "עמק רפאים 18, ירושלים", 31.7624, 35.2183, True),
-        "bnei_brak_store": ("סופר ברכה", "רבי עקיבא 67, בני ברק", 32.0843, 34.8326, True),
-        "inactive_place": ("המקום הישן", "שוק הפשפשים 15, יפו", 32.0548, 34.7528, False),
-        "no_coords_place": ("חומוס הבית", "יהודה הלוי 21, תל אביב", None, None, True),
-        "no_tags_place": ("מטבח השף", "דרך חברון 88, ירושלים", 31.7463, 35.2227, True),
-        "no_hechsher_place": ("ירקנייה השכונתית", "ויצמן 33, כפר סבא", 32.1750, 34.9070, True),
+    user_preferences = {
+        "yael": ["badatz_eda", "beit_yosef", "landau"],
+        "david": ["rabanut_tlv", "tzohar"],
+        "sarah": ["ou", "stark", "queens_vaad"],
+        "moshe": ["kofk", "ok", "crc"],
     }
+    for user_key, hechsher_keys in user_preferences.items():
+        for hechsher_key in hechsher_keys:
+            db.session.add(
+                UserPreferredHechshers(
+                    user_id=users[user_key].user_id,
+                    hechsher_id=hechshers[hechsher_key].hechsher_id,
+                )
+            )
 
+    # --- Place generation (100+ places across Israel + New York)
     places = {}
-    for key, (name, address, lat, lng, is_active) in place_specs.items():
+    place_meta = {}
+
+    israel_city_specs = [
+        ("tel_aviv", "תל אביב", "Tel Aviv", 32.0853, 34.7818),
+        ("jerusalem", "ירושלים", "Jerusalem", 31.7683, 35.2137),
+        ("haifa", "חיפה", "Haifa", 32.7940, 34.9896),
+        ("beer_sheva", "באר שבע", "Beer Sheva", 31.2518, 34.7913),
+        ("bnei_brak", "בני ברק", "Bnei Brak", 32.0840, 34.8350),
+        ("netanya", "נתניה", "Netanya", 32.3215, 34.8532),
+        ("ashdod", "אשדוד", "Ashdod", 31.8014, 34.6435),
+        ("raanana", "רעננה", "Raanana", 32.1848, 34.8713),
+        ("petah_tikva", "פתח תקווה", "Petah Tikva", 32.0840, 34.8878),
+        ("tiberias", "טבריה", "Tiberias", 32.7922, 35.5312),
+        ("eilat", "אילת", "Eilat", 29.5577, 34.9519),
+        ("rishon", "ראשון לציון", "Rishon LeZion", 31.9710, 34.7894),
+    ]
+    israel_templates = [
+        ("גריל", "Grill", ["restaurant", "meat"]),
+        ("קפה", "Cafe", ["cafe", "dairy"]),
+        ("מאפיית", "Bakery", ["bakery", "parve"]),
+        ("מרקט", "Market", ["store", "parve"]),
+        ("חומוס", "Hummus", ["restaurant", "parve"]),
+    ]
+    israeli_hechsher_keys = [
+        "rabanut_jerusalem",
+        "rabanut_tlv",
+        "rabanut_haifa",
+        "rabanut_beer_sheva",
+        "badatz_eda",
+        "landau",
+        "sheerit",
+        "beit_yosef",
+        "tzohar",
+        "rubin",
+        "mahpud",
+        "petah_tikva_rabanut",
+    ]
+
+    street_numbers = [7, 12, 18, 26, 33]
+    hebrew_streets = ["הרצל", "אלנבי", "ביאליק", "יפו", "הנביאים"]
+    english_street_aliases = ["Herzl", "Allenby", "Bialik", "Jaffa", "HaNeviim"]
+
+    place_counter = 0
+    for city_idx, (city_key, city_he, city_en, base_lat, base_lng) in enumerate(israel_city_specs):
+        for template_idx, (name_he, alias_en, tags) in enumerate(israel_templates):
+            key = f"isr_{city_key}_{template_idx}"
+            place = Places(
+                place_name=f"{name_he} {city_he}",
+                street_address=f"{hebrew_streets[template_idx]} {street_numbers[template_idx]}, {city_he}",
+                latitude=round(base_lat + (template_idx * 0.004) + (city_idx * 0.0003), 7),
+                longitude=round(base_lng + (template_idx * 0.004) + (city_idx * 0.0002), 7),
+                is_active=True,
+            )
+            db.session.add(place)
+            places[key] = place
+            place_meta[key] = {
+                "region": "israel",
+                "tags": tags,
+                "aliases": [f"{city_en} {alias_en}", f"{english_street_aliases[template_idx]} {city_en}"],
+                "hechsher_keys": [
+                    israeli_hechsher_keys[(place_counter + template_idx) % len(israeli_hechsher_keys)],
+                    israeli_hechsher_keys[(place_counter + template_idx + 3) % len(israeli_hechsher_keys)],
+                ] if template_idx in (0, 2) else [
+                    israeli_hechsher_keys[(place_counter + template_idx) % len(israeli_hechsher_keys)]
+                ],
+            }
+            place_counter += 1
+
+    ny_area_specs = [
+        ("manhattan", "Manhattan", 40.7831, -73.9712),
+        ("brooklyn", "Brooklyn", 40.6782, -73.9442),
+        ("queens", "Queens", 40.7282, -73.7949),
+        ("bronx", "Bronx", 40.8448, -73.8648),
+        ("staten_island", "Staten Island", 40.5795, -74.1502),
+    ]
+    ny_templates = [
+        ("Central Grill", ["restaurant", "meat"]),
+        ("Corner Cafe", ["cafe", "dairy"]),
+        ("Artisan Bakery", ["bakery", "parve"]),
+        ("Kosher Market", ["store", "parve"]),
+        ("Deli House", ["store", "meat"]),
+        ("Falafel Spot", ["restaurant", "parve"]),
+        ("Pizza House", ["restaurant", "dairy"]),
+        ("Bagel Corner", ["bakery", "dairy"]),
+        ("Sushi Express", ["restaurant", "parve"]),
+    ]
+    american_hechsher_keys = [
+        "ou",
+        "ok",
+        "kofk",
+        "stark",
+        "crc",
+        "trianglek",
+        "scrollk",
+        "earthkosher",
+        "tabletk",
+        "queens_vaad",
+    ]
+    ny_streets = [
+        "Lexington Ave",
+        "Ocean Parkway",
+        "Main Street",
+        "Grand Concourse",
+        "Hylan Boulevard",
+        "Kings Highway",
+        "Queens Blvd",
+        "Flatbush Ave",
+        "Broadway",
+    ]
+
+    for area_idx, (area_key, area_name, base_lat, base_lng) in enumerate(ny_area_specs):
+        for template_idx, (name_en, tags) in enumerate(ny_templates):
+            key = f"ny_{area_key}_{template_idx}"
+            place = Places(
+                place_name=f"{area_name} {name_en}",
+                street_address=f"{100 + template_idx * 17} {ny_streets[template_idx]}, {area_name}, NY",
+                latitude=round(base_lat + (template_idx * 0.005) + (area_idx * 0.0004), 7),
+                longitude=round(base_lng + (template_idx * 0.005) + (area_idx * 0.0003), 7),
+                is_active=True,
+            )
+            db.session.add(place)
+            places[key] = place
+            place_meta[key] = {
+                "region": "new_york",
+                "tags": tags,
+                "aliases": [f"{area_name} {name_en.split()[0]}"] if template_idx % 2 == 0 else [],
+                "hechsher_keys": [
+                    american_hechsher_keys[(area_idx + template_idx) % len(american_hechsher_keys)],
+                    american_hechsher_keys[(area_idx + template_idx + 2) % len(american_hechsher_keys)],
+                ] if template_idx in (0, 3, 7) else [
+                    american_hechsher_keys[(area_idx + template_idx) % len(american_hechsher_keys)]
+                ],
+            }
+
+    # --- Manual edge cases
+    edge_place_specs = {
+        "isr_duplicate_a": ("קפה המרכז", "בן יהודה 44, תל אביב", 32.0781, 34.7692, True),
+        "isr_duplicate_b": ("קפה המרכז", "בן מימון 11, ירושלים", 31.7755, 35.2111, True),
+        "ny_duplicate_a": ("Central Deli", "550 Kingston Ave, Brooklyn, NY", 40.6681, -73.9426, True),
+        "ny_duplicate_b": ("Central Deli", "212 Grand St, Manhattan, NY", 40.7162, -73.9911, True),
+        "inactive_israel": ("המסעדה הישנה", "שוק הפשפשים 15, יפו", 32.0548, 34.7528, False),
+        "inactive_ny": ("Closed Kosher Corner", "91 Delancey St, Manhattan, NY", 40.7187, -73.9890, False),
+        "no_coords_israel": ("חומוס ללא מיקום", "יהודה הלוי 21, תל אביב", None, None, True),
+        "no_coords_ny": ("Mystery Bakery", "74 Lee Ave, Brooklyn, NY", None, None, True),
+        "no_tags_israel": ("מטבח השף", "דרך חברון 88, ירושלים", 31.7463, 35.2227, True),
+        "no_hechsher_israel": ("ירקנייה שכונתית", "ויצמן 33, כפר סבא", 32.1750, 34.9070, True),
+    }
+    for key, (name, address, lat, lng, is_active) in edge_place_specs.items():
         place = Places(
             place_name=name,
             street_address=address,
@@ -186,122 +323,195 @@ def seed_data() -> None:
         )
         db.session.add(place)
         places[key] = place
+
     db.session.flush()
 
-    # --- Place hechshers mapping
-    place_hechsher_map = {
-        "falafel_hakosem": ["badatz", "tel_aviv_rabbinate"],
-        "machneyuda": ["rabbinate_jerusalem", "badatz"],
-        "carmel_bakery": ["tzohar"],
-        "neve_tzedek_cafe": ["tel_aviv_rabbinate"],
-        "hatikva_shawarma": ["badatz", "beit_yosef"],
-        "yarkon_market": ["tel_aviv_rabbinate"],
-        "geula_pastry": ["rabbinate_jerusalem", "beit_yosef"],
-        "carmel_deli": ["tzohar"],
-        "hagefen_cafe": ["beit_yosef"],
-        "old_city_bakery": ["rabbinate_jerusalem"],
-        "eilat_fish": ["tzohar"],
-        "tiberias_grill": ["rabbinate_jerusalem"],
-        "haifa_cafe_roman": ["tzohar"],
-        "jerusalem_cafe_same_name": ["rabbinate_jerusalem"],
-        "bnei_brak_store": ["badatz"],
-        "inactive_place": ["tel_aviv_rabbinate"],
-        "no_coords_place": ["tel_aviv_rabbinate"],
-        "no_tags_place": ["rabbinate_jerusalem"],
-        # no_hechsher_place intentionally omitted
-    }
-    for place_key, hechsher_keys in place_hechsher_map.items():
-        for key in hechsher_keys:
+    # Populate tags / aliases / hechshers for generated places.
+    for key, meta in place_meta.items():
+        for alias in meta["aliases"]:
+            db.session.add(PlaceAliases(place_id=places[key].place_id, place_alias=alias))
+        for tag in meta["tags"]:
+            db.session.add(PlaceTags(place_id=places[key].place_id, place_tag=tag))
+        for idx, hechsher_key in enumerate(meta["hechsher_keys"]):
             db.session.add(
                 PlaceHechshers(
-                    place_id=places[place_key].place_id,
-                    hechsher_id=hechshers[key].hechsher_id,
-                    place_hechsher_marking_verity="verified",
+                    place_id=places[key].place_id,
+                    hechsher_id=hechshers[hechsher_key].hechsher_id,
+                    place_hechsher_marking_verity="verified" if idx == 0 else "pending",
                 )
             )
 
-    # --- Place tags mapping (for robust filter testing)
-    place_tag_map = {
-        "falafel_hakosem": ["restaurant", "meat"],
-        "machneyuda": ["restaurant", "meat"],
-        "carmel_bakery": ["bakery", "parve"],
-        "neve_tzedek_cafe": ["cafe", "dairy"],
-        "hatikva_shawarma": ["restaurant", "meat"],
-        "yarkon_market": ["store", "parve"],
-        "geula_pastry": ["bakery", "dairy"],
-        "carmel_deli": ["store", "meat"],
-        "hagefen_cafe": ["cafe", "parve"],
-        "old_city_bakery": ["bakery", "parve"],
-        "eilat_fish": ["restaurant", "meat"],
-        "tiberias_grill": ["restaurant", "meat"],
-        "haifa_cafe_roman": ["cafe", "dairy"],
-        "jerusalem_cafe_same_name": ["cafe", "parve"],
-        "bnei_brak_store": ["store", "parve"],
-        "inactive_place": ["restaurant", "meat"],
-        "no_coords_place": ["restaurant", "parve"],
-        # no_tags_place intentionally omitted
-        # no_hechsher_place intentionally omitted
+    # Edge-case aliases/tags/hechshers
+    edge_meta = {
+        "isr_duplicate_a": {"aliases": ["Central Cafe Tel Aviv"], "tags": ["cafe", "dairy"], "hechshers": ["rabanut_tlv"]},
+        "isr_duplicate_b": {"aliases": ["Central Cafe Jerusalem"], "tags": ["cafe", "parve"], "hechshers": ["rabanut_jerusalem"]},
+        "ny_duplicate_a": {"aliases": ["BK Central Deli"], "tags": ["store", "meat"], "hechshers": ["ok", "kofk"]},
+        "ny_duplicate_b": {"aliases": ["Manhattan Central Deli"], "tags": ["store", "meat"], "hechshers": ["ou"]},
+        "inactive_israel": {"aliases": ["Old Restaurant Jaffa"], "tags": ["restaurant", "meat"], "hechshers": ["rabanut_tlv"]},
+        "inactive_ny": {"aliases": ["Closed Corner"], "tags": ["store", "parve"], "hechshers": ["queens_vaad"]},
+        "no_coords_israel": {"aliases": ["No Location Hummus"], "tags": ["restaurant", "parve"], "hechshers": ["badatz_eda"]},
+        "no_coords_ny": {"aliases": ["Unknown Bakery"], "tags": ["bakery", "dairy"], "hechshers": ["stark"]},
+        "no_tags_israel": {"aliases": ["Chef Kitchen Jerusalem"], "tags": [], "hechshers": ["beit_yosef"]},
+        "no_hechsher_israel": {"aliases": ["Neighborhood Produce"], "tags": ["store", "parve"], "hechshers": []},
     }
-    for place_key, tags in place_tag_map.items():
-        for tag in tags:
-            db.session.add(PlaceTags(place_id=places[place_key].place_id, place_tag=tag))
+    for key, meta in edge_meta.items():
+        for alias in meta["aliases"]:
+            db.session.add(PlaceAliases(place_id=places[key].place_id, place_alias=alias))
+        for tag in meta["tags"]:
+            db.session.add(PlaceTags(place_id=places[key].place_id, place_tag=tag))
+        for idx, hechsher_key in enumerate(meta["hechshers"]):
+            db.session.add(
+                PlaceHechshers(
+                    place_id=places[key].place_id,
+                    hechsher_id=hechshers[hechsher_key].hechsher_id,
+                    place_hechsher_marking_verity="verified" if idx == 0 else "pending",
+                )
+            )
 
-    # --- Example moderation history rows
-    db.session.add_all(
-        [
+    # --- Moderation history / uploads by users and admin
+    visible_now = datetime.now(timezone.utc)
+    uploaded_place_keys = [
+        ("yael", "isr_tel_aviv_0", "approved", "approved"),
+        ("david", "isr_jerusalem_1", "approved", "approved"),
+        ("sarah", "ny_brooklyn_2", "approved", "pending_review"),
+        ("moshe", "ny_queens_0", "approved", "approved"),
+        ("admin", "isr_haifa_3", "approved", "approved"),
+        ("admin", "ny_manhattan_4", "approved", "approved"),
+        ("yael", "no_coords_israel", "flagged", "pending_review"),
+        ("david", "inactive_israel", "flagged", "rejected"),
+    ]
+    for uploader_key, place_key, spam_result, admin_status in uploaded_place_keys:
+        payload = {
+            "submission_type": "new_place",
+            "place_id": places[place_key].place_id,
+            "place_name": places[place_key].place_name,
+            "street_address": places[place_key].street_address,
+            "latitude": float(places[place_key].latitude) if places[place_key].latitude is not None else None,
+            "longitude": float(places[place_key].longitude) if places[place_key].longitude is not None else None,
+            "hechsher_ids": [ph.hechsher_id for ph in places[place_key].place_hechshers],
+            "tags": [pt.place_tag for pt in places[place_key].place_tags],
+            "aliases": [pa.place_alias for pa in places[place_key].place_aliases],
+            "source": "manual",
+            "moderation": {"source": "seed", "reason": "seeded history"},
+        }
+        is_visible = spam_result == "approved" or admin_status == "approved"
+        if admin_status == "rejected":
+            is_visible = False
+        db.session.add(
             Submissions(
-                submitted_by_user_id=contributor.user_id,
-                place_id=places["falafel_hakosem"].place_id,
-                submission_type="tag_update",
-                payload_json={
-                    "submission_type": "tag_update",
-                    "place_id": places["falafel_hakosem"].place_id,
-                    "tags": ["restaurant", "meat"],
-                    "reason": "confirmed during visit",
+                submitted_by_user_id=users[uploader_key].user_id,
+                place_id=places[place_key].place_id,
+                submission_type="new_place",
+                payload_json=payload,
+                spam_filter_result=spam_result,
+                admin_review_status=admin_status,
+                admin_reject_reason="Quality issue" if admin_status == "rejected" else None,
+                is_visible=is_visible,
+                published_at=visible_now if is_visible else None,
+            )
+        )
+
+    extra_submissions = [
+        {
+            "user": "yael",
+            "place": "isr_tel_aviv_1",
+            "type": "alias_update",
+            "spam": "approved",
+            "admin": "approved",
+            "payload": {
+                "submission_type": "alias_update",
+                "place_id": None,
+                "aliases": ["Tel Aviv Coffee House", "Allenby Cafe"],
+                "reason": "Common English names",
+            },
+        },
+        {
+            "user": "sarah",
+            "place": "ny_brooklyn_6",
+            "type": "edit",
+            "spam": "flagged",
+            "admin": "pending_review",
+            "payload": {
+                "submission_type": "edit",
+                "place_name": "Brooklyn Pizza House Late Night",
+                "changes": {"hours": "Open until midnight"},
+                "reason": "Updated info",
+            },
+        },
+        {
+            "user": "moshe",
+            "place": "isr_haifa_2",
+            "type": "tag_update",
+            "spam": "approved",
+            "admin": "approved",
+            "payload": {
+                "submission_type": "tag_update",
+                "tags": ["bakery", "parve"],
+                "reason": "Confirmed pareve only",
+            },
+        },
+        {
+            "user": "admin",
+            "place": None,
+            "type": "hechsher_create",
+            "spam": "flagged",
+            "admin": "pending_review",
+            "payload": {
+                "submission_type": "hechsher_create",
+                "hechsher": {
+                    "hechsher_display_name": "Community Kashrus NYC",
+                    "aliases": ["CKNYC", "Community Kashrus"],
                 },
-                spam_filter_result="approved",
-                admin_review_status="approved",
-                is_visible=True,
-                published_at=datetime.now(timezone.utc),
-            ),
+                "reason": "Proposed new regional certification",
+            },
+        },
+        {
+            "user": "david",
+            "place": None,
+            "type": "hechsher_create",
+            "spam": "approved",
+            "admin": "rejected",
+            "payload": {
+                "submission_type": "hechsher_create",
+                "hechsher": {
+                    "hechsher_display_name": "כשרות שכונתית",
+                    "aliases": ["Neighborhood Kashrus"],
+                },
+                "reason": "Needs manual verification",
+            },
+        },
+    ]
+    for item in extra_submissions:
+        place_id = places[item["place"]].place_id if item["place"] else None
+        payload = dict(item["payload"])
+        if place_id is not None:
+            payload["place_id"] = place_id
+        is_visible = item["spam"] == "approved" or item["admin"] == "approved"
+        if item["admin"] == "rejected":
+            is_visible = False
+        db.session.add(
             Submissions(
-                submitted_by_user_id=viewer.user_id,
-                place_id=places["machneyuda"].place_id,
-                submission_type="tag_update",
-                payload_json={
-                    "submission_type": "tag_update",
-                    "place_id": places["machneyuda"].place_id,
-                    "tags": ["dairy", "cafe"],
-                    "reason": "menu changed",
-                },
-                spam_filter_result="flagged",
-                admin_review_status="pending_review",
-                is_visible=False,
-            ),
-            Submissions(
-                submitted_by_user_id=viewer.user_id,
-                place_id=places["neve_tzedek_cafe"].place_id,
-                submission_type="edit",
-                payload_json={
-                    "submission_type": "edit",
-                    "place_id": places["neve_tzedek_cafe"].place_id,
-                    "place_name": "קפה נווה צדק המחודש",
-                    "tags": ["cafe", "dairy"],
-                },
-                spam_filter_result="approved",
-                admin_review_status="pending_review",
-                is_visible=True,
-                published_at=datetime.now(timezone.utc),
-            ),
-        ]
-    )
+                submitted_by_user_id=users[item["user"]].user_id,
+                place_id=place_id,
+                submission_type=item["type"],
+                payload_json=payload,
+                spam_filter_result=item["spam"],
+                admin_review_status=item["admin"],
+                admin_reject_reason="Rejected by seed scenario" if item["admin"] == "rejected" else None,
+                is_visible=is_visible,
+                published_at=visible_now if is_visible else None,
+            )
+        )
 
     db.session.commit()
 
     print("Seed complete.")
+    print(f"Users seeded: {Users.query.count()} (basic: 4, admin: 1)")
+    print(f"Hechshers seeded: {Hechshers.query.count()}")
     print(f"Places seeded: {Places.query.count()}")
+    print(f"Submissions seeded: {Submissions.query.count()}")
     print("Admin login: admin@mapah.local / AdminPass123!")
-    print("Contributor login: contributor@mapah.local / ContributorPass123!")
+    print("Basic logins: yael@mapah.local, david@mapah.local, sarah@mapah.local, moshe@mapah.local")
 
 
 def run_seed() -> None:
