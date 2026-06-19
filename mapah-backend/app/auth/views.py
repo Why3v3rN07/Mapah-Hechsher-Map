@@ -113,7 +113,15 @@ def register():
     db.session.commit()
 
     csrf_token = generate_csrf_token()
-    response, status = success({"user": user.to_dict(), "csrf_token": csrf_token}, 201)
+    response, status = success(
+        {
+            "user": user.to_dict(),
+            "csrf_token": csrf_token,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+        },
+        201,
+    )
     _set_auth_cookies(response, access_token, refresh_token, csrf_token)
     return response, status
 
@@ -133,7 +141,15 @@ def login():
     db.session.commit()
 
     csrf_token = generate_csrf_token()
-    response, status = success({"user": user.to_dict(), "message": "Logged in", "csrf_token": csrf_token})
+    response, status = success(
+        {
+            "user": user.to_dict(),
+            "message": "Logged in",
+            "csrf_token": csrf_token,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+        }
+    )
     _set_auth_cookies(response, access_token, refresh_token, csrf_token)
     return response, status
 
@@ -178,7 +194,14 @@ def refresh():
     db.session.commit()
 
     new_csrf = generate_csrf_token()
-    response, status = success({"message": "Token refreshed", "csrf_token": new_csrf})
+    response, status = success(
+        {
+            "message": "Token refreshed",
+            "csrf_token": new_csrf,
+            "access_token": access_token,
+            "refresh_token": new_refresh_token,
+        }
+    )
     set_access_cookies(response, access_token)
     set_refresh_cookies(response, new_refresh_token)
     set_csrf_cookie(response, new_csrf)

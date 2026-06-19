@@ -1,6 +1,11 @@
 import client from './client';
 import axios from 'axios';
-import { storeCsrfToken } from './client';
+import { clearSessionTokens, storeCsrfToken, storeSessionTokens } from './client';
+
+function storeAuthPayload(data) {
+  if (data?.csrf_token) storeCsrfToken(data.csrf_token);
+  storeSessionTokens(data?.access_token, data?.refresh_token);
+}
 
 export const getCsrfToken = async () => {
   try {
@@ -31,21 +36,27 @@ export const getCsrfToken = async () => {
 
 export const register = async (data) => {
   const res = await client.post('/auth/register', data);
-  if (res.data?.csrf_token) storeCsrfToken(res.data.csrf_token);
+  storeAuthPayload(res.data);
   return res;
 };
 
 export const login = async (data) => {
   const res = await client.post('/auth/login', data);
-  if (res.data?.csrf_token) storeCsrfToken(res.data.csrf_token);
+  storeAuthPayload(res.data);
   return res;
 };
 
-export const logout   = ()     => client.post('/auth/logout');
+export const logout = async () => {
+  try {
+    return await client.post('/auth/logout');
+  } finally {
+    clearSessionTokens();
+  }
+};
 
 export const refresh  = async () => {
-  const res = await client.post('/auth/refresh');
-  if (res.data?.csrf_token) storeCsrfToken(res.data.csrf_token);
+  const res = await client.post('/auth/refresh', null, { _useRefreshToken: true });
+  storeAuthPayload(res.data);
   return res;
 };
 

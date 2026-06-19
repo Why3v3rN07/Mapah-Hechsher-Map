@@ -13,7 +13,7 @@ class Config:
 
     # ── JWT (httpOnly cookies) ─────────────────────────────────────────────
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "jwt-dev-secret-change-me")
-    JWT_TOKEN_LOCATION = ["cookies"]
+    JWT_TOKEN_LOCATION = ["cookies", "headers"]
     JWT_ACCESS_COOKIE_NAME = "access_token"
     JWT_REFRESH_COOKIE_NAME = "refresh_token"
     JWT_ACCESS_TOKEN_EXPIRES = timedelta(minutes=15)

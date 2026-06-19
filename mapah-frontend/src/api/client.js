@@ -15,10 +15,30 @@ const apiBase = rawApiBase.endsWith('/') && rawApiBase !== '/'
 
 // ── CSRF token storage ────────────────────────────────────────────────────────
 const CSRF_STORAGE_KEY = 'mapah_csrf_token';
+const ACCESS_TOKEN_KEY = 'mapah_access_token';
+const REFRESH_TOKEN_KEY = 'mapah_refresh_token';
 
 /** Called by auth.js whenever a response body contains a fresh csrf_token. */
 export function storeCsrfToken(token) {
   if (token) localStorage.setItem(CSRF_STORAGE_KEY, token);
+}
+
+export function storeSessionTokens(accessToken, refreshToken) {
+  if (accessToken) localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  if (refreshToken) localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+}
+
+export function clearSessionTokens() {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+function readAccessToken() {
+  return localStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+function readRefreshToken() {
+  return localStorage.getItem(REFRESH_TOKEN_KEY);
 }
 
 /** Read a cookie by name (works on same-origin / local dev). */
@@ -46,6 +66,10 @@ const client = axios.create({
 const STATE_CHANGING = ['post', 'put', 'patch', 'delete'];
 
 client.interceptors.request.use((config) => {
+  const useRefreshToken = config._useRefreshToken === true;
+  const bearer = useRefreshToken ? readRefreshToken() : readAccessToken();
+  if (bearer) config.headers.Authorization = `Bearer ${bearer}`;
+
   if (STATE_CHANGING.includes(config.method?.toLowerCase())) {
     const csrf = readCsrfToken();
     if (csrf) config.headers['X-CSRF-Token'] = csrf;
@@ -85,11 +109,12 @@ client.interceptors.response.use(
       _refreshing = true;
 
       try {
-        await client.post('/auth/refresh');
+        await client.post('/auth/refresh', null, { _useRefreshToken: true });
         processQueue(null);
         return client(orig);
       } catch (refreshErr) {
         processQueue(refreshErr);
+        clearSessionTokens();
         window.dispatchEvent(new CustomEvent('auth:expired'));
         return Promise.reject(refreshErr);
       } finally {
