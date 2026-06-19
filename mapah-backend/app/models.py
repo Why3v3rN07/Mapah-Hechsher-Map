@@ -1,9 +1,9 @@
 """
 SQLAlchemy models – aligned with spec §7 target data model.
 """
-from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy import Enum as PgEnum
+from sqlalchemy.exc import SQLAlchemyError
 
 from .extensions import db
 
@@ -18,7 +18,9 @@ verification_status_enum = PgEnum(
     name="verification_status",
 )
 user_status_enum = PgEnum("admin", "basic", name="user_status")
-submission_type_enum = PgEnum("new_place", "tag_update", "edit", name="submission_type")
+submission_type_enum = PgEnum(
+    "new_place", "tag_update", "edit", "alias_update", "hechsher_create", name="submission_type"
+)
 spam_filter_result_enum = PgEnum("approved", "flagged", name="spam_filter_result")
 admin_review_status_enum = PgEnum(
     "pending_review", "approved", "rejected",
@@ -45,8 +47,18 @@ class Places(db.Model):
     place_tags = db.relationship(
         "PlaceTags", backref="place", lazy="select", cascade="all, delete-orphan"
     )
+    place_aliases = db.relationship(
+        "PlaceAliases", backref="place", lazy="select", cascade="all, delete-orphan"
+    )
 
     def to_dict(self, include_distance: float | None = None, distance_unit: str = "mi") -> dict:
+        aliases = []
+        try:
+            aliases = [pa.place_alias for pa in self.place_aliases]
+        except SQLAlchemyError:
+            # Keep place reads functional even when DB schema lags behind code.
+            aliases = []
+
         d = {
             "place_id": self.place_id,
             "place_name": self.place_name,
@@ -56,6 +68,7 @@ class Places(db.Model):
             "date_added": self.date_added.isoformat() if self.date_added else None,
             "hechshers": [ph.to_dict() for ph in self.place_hechshers],
             "tags": [pt.place_tag for pt in self.place_tags],
+            "aliases": aliases,
         }
         if include_distance is not None:
             d["distance"] = {"value": round(include_distance, 2), "unit": distance_unit}
@@ -67,6 +80,13 @@ class PlaceTags(db.Model):
 
     place_id = db.Column(db.Integer, db.ForeignKey("places.place_id"), primary_key=True)
     place_tag = db.Column(place_tag_enum, primary_key=True)
+
+
+class PlaceAliases(db.Model):
+    __tablename__ = "place_aliases"
+
+    place_id = db.Column(db.Integer, db.ForeignKey("places.place_id"), primary_key=True)
+    place_alias = db.Column(db.String(120), primary_key=True)
 
 
 class Hechshers(db.Model):
@@ -210,12 +230,26 @@ class Submissions(db.Model):
         )
 
     def to_dict(self) -> dict:
+        payload = self.payload_json or {}
+        hechsher_payload = payload.get("hechsher") or {}
+        summary = {
+            "submission_type": self.submission_type,
+            "place_name": payload.get("place_name") or payload.get("original", {}).get("place_name"),
+            "street_address": payload.get("street_address"),
+            "hechsher_ids": payload.get("hechsher_ids", []),
+            "tags": payload.get("tags", []),
+            "aliases": payload.get("aliases", []) or hechsher_payload.get("aliases", []),
+            "hechsher_display_name": hechsher_payload.get("hechsher_display_name"),
+            "reason": payload.get("reason"),
+            "changes": payload.get("changes", {}),
+        }
         return {
             "submission_id": self.submission_id,
             "submitted_by_user_id": self.submitted_by_user_id,
             "place_id": self.place_id,
             "submission_type": self.submission_type,
-            "payload_json": self.payload_json,
+            "payload_json": payload,
+            "summary": summary,
             "spam_filter_result": self.spam_filter_result,
             "admin_review_status": self.admin_review_status,
             "admin_reject_reason": self.admin_reject_reason,

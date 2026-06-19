@@ -81,7 +81,7 @@ components:
         submission_id:         { type: integer }
         submitted_by_user_id:  { type: integer, nullable: true }
         place_id:              { type: integer, nullable: true }
-        submission_type:       { type: string, enum: [new_place, tag_update, edit] }
+        submission_type:       { type: string, enum: [new_place, tag_update, edit, alias_update, hechsher_create] }
         payload_json:          { type: object }
         spam_filter_result:    { type: string, enum: [approved, flagged] }
         admin_review_status:   { type: string, enum: [pending_review, approved, rejected] }
@@ -143,6 +143,75 @@ paths:
                   count: { type: integer }
         '400': { description: Invalid query, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
+  /api/locations/search:
+    get:
+      summary: Typeahead location suggestions for map search and address entry
+      tags: [Places]
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 8 } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        place_name: { type: string }
+                        lat: { type: number }
+                        lng: { type: number }
+        '503': { description: Geocoding service unavailable }
+
+  /api/hechshers:
+    get:
+      summary: List all hechshers with aliases
+      tags: [Hechshers]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/HechsherSearchResult' } }
+                  count: { type: integer }
+    post:
+      summary: Create a new hechsher (moderated)
+      tags: [Hechshers]
+      security:
+        - csrfHeader: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                aliases:
+                  type: array
+                  items: { type: string }
+                icon:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hechsher: { $ref: '#/components/schemas/HechsherRef' }
+                  submission_id: { type: integer }
+                  message: { type: string }
+        '409': { description: Duplicate hechsher }
+
   /api/hechshers/search:
     get:
       summary: Typeahead search for hechshers (name + alias)
@@ -175,7 +244,7 @@ paths:
               type: object
               required: [submission_type]
               properties:
-                submission_type: { type: string, enum: [new_place, tag_update, edit] }
+                submission_type: { type: string, enum: [new_place, tag_update, edit, alias_update] }
                 place_id:        { type: integer, nullable: true }
                 place_name:      { type: string }
                 street_address:  { type: string }
@@ -224,6 +293,51 @@ paths:
                 properties:
                   submission: { $ref: '#/components/schemas/Submission' }
                   published:  { type: boolean }
+        '429': { description: Rate limited }
+
+  /api/places/{id}/aliases:
+    get:
+      summary: List aliases for a place
+      tags: [Places]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { type: string } }
+                  count: { type: integer }
+    post:
+      summary: Propose alias updates for an existing place (authenticated)
+      tags: [Submissions]
+      security:
+        - cookieAuthAccess: []
+        - csrfHeader: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [aliases]
+              properties:
+                aliases: { type: array, items: { type: string } }
+                reason: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  submission: { $ref: '#/components/schemas/Submission' }
+                  published: { type: boolean }
+        '401': { description: Authentication required }
         '429': { description: Rate limited }
 
   /auth/register:

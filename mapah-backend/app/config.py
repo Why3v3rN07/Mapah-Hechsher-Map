@@ -24,6 +24,22 @@ class Config:
 
     # ── External Services ─────────────────────────────────────────────────
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_MODERATION_MODEL = os.getenv(
+        "ANTHROPIC_MODERATION_MODEL", "claude-sonnet-4-5"
+    )
+    ANTHROPIC_MODERATION_FALLBACK_MODELS = os.getenv(
+        "ANTHROPIC_MODERATION_FALLBACK_MODELS",
+        "claude-3-7-sonnet-latest,claude-3-5-haiku-20241022",
+    )
+    ANTHROPIC_MODERATION_MAX_TOKENS = int(
+        os.getenv("ANTHROPIC_MODERATION_MAX_TOKENS", "200")
+    )
+    ANTHROPIC_AUTO_APPROVE_WITHOUT_KEY = (
+        os.getenv("ANTHROPIC_AUTO_APPROVE_WITHOUT_KEY", "false").lower() == "true"
+    )
+    ANTHROPIC_MODERATION_RUNTIME_VERSION = os.getenv(
+        "ANTHROPIC_MODERATION_RUNTIME_VERSION", "2026-06-18-runtime-v1"
+    )
     MAPBOX_SECRET_TOKEN = os.getenv("MAPBOX_SECRET_TOKEN", "")
 
     # ── Rate Limiting ─────────────────────────────────────────────────────
@@ -39,6 +55,9 @@ class Config:
     # ── Map Defaults ──────────────────────────────────────────────────────
     DEFAULT_MAP_LAT = 31.7683
     DEFAULT_MAP_LNG = 35.2137
+
+    # ── Upload Storage ────────────────────────────────────────────────────
+    HECHSHER_UPLOAD_DIR = os.getenv("HECHSHER_UPLOAD_DIR", "")
 
 
 class DevelopmentConfig(Config):

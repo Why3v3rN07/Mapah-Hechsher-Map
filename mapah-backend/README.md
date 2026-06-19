@@ -11,6 +11,20 @@ Flask API for Mapah MVP (JWT auth, moderation pipeline, submissions, admin queue
 python -m pip install -r requirements.txt
 ```
 
+### AI moderation settings
+
+New place submissions are moderated through the Anthropics Messages API.
+
+- `ANTHROPIC_API_KEY` – required to enable live AI moderation
+- `ANTHROPIC_MODERATION_MODEL` – optional, defaults to `claude-sonnet-4-5`
+- `ANTHROPIC_MODERATION_FALLBACK_MODELS` – optional comma-separated fallback list
+- `ANTHROPIC_MODERATION_MAX_TOKENS` – optional, defaults to `200`
+- `ANTHROPIC_AUTO_APPROVE_WITHOUT_KEY` – optional, defaults to `false`
+
+If `ANTHROPIC_API_KEY` is missing, submissions are fail-closed (flagged) outside tests.
+In test mode, moderation is bypassed unless you explicitly set an API key.
+If a configured model is unavailable, the backend automatically retries fallback models.
+
 ## Migrations + Upgrade Script
 
 Run Alembic upgrade safely (with schema verification + recovery):

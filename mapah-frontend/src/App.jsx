@@ -7,6 +7,7 @@ import SubmissionModal from './components/Submission/SubmissionModal';
 import HomePage from './pages/HomePage';
 import AdminPage from './pages/AdminPage';
 import MySubmissionsPage from './pages/MySubmissionsPage';
+import PreferencesPage from './pages/PreferencesPage';
 import { useAuth } from './contexts/AuthContext';
 import './App.css';
 
@@ -65,6 +66,15 @@ function App() {
         />
 
         <Route
+          path="/preferences"
+          element={
+            <ProtectedRoute>
+              <PreferencesPage />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
           path="/admin"
           element={
             <AdminRoute>
@@ -75,13 +85,15 @@ function App() {
       </Routes>
 
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} />
-      <SubmissionModal
-        open={submissionMode !== null}
-        mode={submissionMode || 'new_place'}
-        place={submissionPlace}
-        onClose={closeSubmission}
-        onSubmitted={() => {}}
-      />
+      {submissionMode !== null && (
+        <SubmissionModal
+          open
+          mode={submissionMode || 'new_place'}
+          place={submissionPlace}
+          onClose={closeSubmission}
+          onSubmitted={() => {}}
+        />
+      )}
     </>
   );
 }

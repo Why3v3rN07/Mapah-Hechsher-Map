@@ -11,18 +11,24 @@ Submission pipeline (spec §5.4 + §5.5):
 """
 from datetime import datetime, timezone
 
-from flask import request
+from flask import current_app, request
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.extensions import db, limiter
 from app.models import (
     Hechshers,
+    PlaceAliases,
     PlaceHechshers,
     PlaceTags,
     Places,
     Submissions,
 )
-from app.services.moderation import are_tags_inconsistent, classify_submission
+from app.services.moderation import (
+    are_aliases_inconsistent,
+    are_tags_inconsistent,
+    classify_submission,
+)
 from app.utils.security import (
     error_response,
     get_submission_rate_key,
@@ -32,7 +38,11 @@ from app.utils.security import (
 from . import api_bp
 
 _VALID_TAGS = {"restaurant", "bakery", "store", "cafe", "meat", "dairy", "parve"}
-_VALID_SUBMISSION_TYPES = {"new_place", "edit", "tag_update"}
+_VALID_SUBMISSION_TYPES = {"new_place", "edit", "tag_update", "alias_update"}
+
+
+def _deduct_if_successful(response) -> bool:
+    return response.status_code < 400
 
 
 def _current_user_id() -> int | None:
@@ -62,6 +72,9 @@ def _publish_new_place(payload: dict) -> Places:
     for tag in payload.get("tags", []):
         db.session.add(PlaceTags(place_id=place.place_id, place_tag=tag))
 
+    for alias in payload.get("aliases", []):
+        db.session.add(PlaceAliases(place_id=place.place_id, place_alias=alias))
+
     return place
 
 
@@ -86,6 +99,11 @@ def _apply_edit(place: Places, payload: dict):
         for tag in payload["tags"]:
             db.session.add(PlaceTags(place_id=place.place_id, place_tag=tag))
 
+    if "aliases" in payload:
+        PlaceAliases.query.filter_by(place_id=place.place_id).delete()
+        for alias in payload["aliases"]:
+            db.session.add(PlaceAliases(place_id=place.place_id, place_alias=alias))
+
 
 def _apply_tag_update(place: Places, payload: dict):
     """Replace place tags with proposed tags from a tag_update submission."""
@@ -94,15 +112,68 @@ def _apply_tag_update(place: Places, payload: dict):
         db.session.add(PlaceTags(place_id=place.place_id, place_tag=tag))
 
 
+def _apply_alias_update(place: Places, payload: dict):
+    """Replace place aliases with proposed aliases from an alias_update submission."""
+    PlaceAliases.query.filter_by(place_id=place.place_id).delete()
+    for alias in payload.get("aliases", []):
+        db.session.add(PlaceAliases(place_id=place.place_id, place_alias=alias))
+
+
+def _moderate_payload(payload_snapshot: dict, existing_tags: list[str] | None = None) -> dict:
+    submission_type = payload_snapshot.get("submission_type")
+
+    if submission_type == "tag_update" and existing_tags is not None:
+        if are_tags_inconsistent(existing_tags, payload_snapshot.get("tags", [])):
+            return {
+                "result": "flagged",
+                "reason": "Proposed tags are inconsistent with existing tags",
+            }
+
+    if submission_type == "alias_update":
+        existing_aliases = payload_snapshot.get("original", {}).get("aliases", [])
+        proposed_aliases = payload_snapshot.get("aliases", [])
+        if are_aliases_inconsistent(existing_aliases, proposed_aliases):
+            return {
+                "result": "flagged",
+                "reason": "Proposed aliases are inconsistent with existing aliases",
+            }
+
+    moderation = classify_submission(payload_snapshot, existing_tags=existing_tags)
+    if not isinstance(moderation, dict):
+        return {
+            "result": "flagged",
+            "reason": "Invalid moderation response",
+            "source": "invalid_response",
+            "moderation_version": "submissions-failsafe-v1",
+        }
+
+    if moderation.get("result") not in {"approved", "flagged"}:
+        moderation["result"] = "flagged"
+        moderation["reason"] = "Invalid moderation result value"
+
+    moderation.setdefault("source", "legacy_unknown")
+    moderation.setdefault(
+        "moderation_version",
+        current_app.config.get("ANTHROPIC_MODERATION_RUNTIME_VERSION", "submissions-failsafe-v1"),
+    )
+    return moderation
+
+
 # ── POST /api/submissions/place ───────────────────────────────────────────────
 
 @api_bp.route("/submissions/place", methods=["POST"])
 @require_csrf
-@limiter.limit("1 per minute", key_func=get_submission_rate_key, error_message="Rate limit: one submission per minute.")
+@limiter.limit(
+    "1 per minute",
+    key_func=get_submission_rate_key,
+    error_message="Rate limit: one submission per minute.",
+    deduct_when=_deduct_if_successful,
+)
 def submit_place():
     data = request.get_json() or {}
     submission_type = data.get("submission_type")
     user_id = _current_user_id()
+    place = None
 
     # ── Validate submission type
     if submission_type not in _VALID_SUBMISSION_TYPES:
@@ -110,26 +181,34 @@ def submit_place():
 
     # ── Validate required fields
     if submission_type == "new_place":
-        required = ["place_name", "street_address", "hechsher_ids", "tags"]
+        required = ["place_name", "hechsher_ids", "tags"]
         missing = [f for f in required if not data.get(f)]
         if missing:
             return error_response("validation_error", f"Missing required fields: {missing}", 422)
+        has_address = bool(str(data.get("street_address", "")).strip())
+        has_coords = data.get("latitude") is not None and data.get("longitude") is not None
+        if not has_address and not has_coords:
+            return error_response(
+                "validation_error",
+                "Provide either street_address or both latitude/longitude",
+                422,
+            )
         if not data.get("hechsher_ids"):
             return error_response("validation_error", "At least one hechsher is required", 422)
         # Validate hechsher IDs exist
         for hid in data["hechsher_ids"]:
-            if not Hechshers.query.get(hid):
+            if not db.session.get(Hechshers, hid):
                 return error_response("not_found", f"Hechsher {hid} not found", 404)
 
-    elif submission_type in ("edit", "tag_update"):
+    elif submission_type in ("edit", "tag_update", "alias_update"):
         place_id = data.get("place_id")
         if not place_id:
-            return error_response("validation_error", "place_id is required for edit/tag_update", 422)
+            return error_response("validation_error", "place_id is required for edit/tag_update/alias_update", 422)
         place = Places.query.filter_by(place_id=place_id, is_active=True).first()
         if not place:
             return error_response("not_found", "Place not found", 404)
-        if submission_type == "edit" and user_id is None:
-            return error_response("unauthorized", "Login required to edit a place", 401)
+        if submission_type in ("edit", "alias_update") and user_id is None:
+            return error_response("unauthorized", "Login required to edit aliases or place details", 401)
 
     # Validate tags
     invalid_tags = [t for t in data.get("tags", []) if t not in _VALID_TAGS]
@@ -146,24 +225,37 @@ def submit_place():
         "longitude": data.get("longitude"),
         "hechsher_ids": data.get("hechsher_ids", []),
         "tags": data.get("tags", []),
+        "aliases": [a.strip() for a in data.get("aliases", []) if isinstance(a, str) and a.strip()],
+        "reason": data.get("reason", ""),
         "source": data.get("source", "manual"),
     }
 
     # Store original state for edit/tag_update (needed for potential revert on rejection)
-    if submission_type in ("edit", "tag_update"):
-        place = Places.query.get(data["place_id"])
+    if submission_type in ("edit", "tag_update", "alias_update"):
+        original_place = place
+        if original_place is None:
+            return error_response("not_found", "Place not found", 404)
         payload_snapshot["original"] = {
-            "place_name": place.place_name,
-            "street_address": place.street_address,
-            "latitude": float(place.latitude) if place.latitude else None,
-            "longitude": float(place.longitude) if place.longitude else None,
-            "hechsher_ids": [ph.hechsher_id for ph in place.place_hechshers],
-            "tags": [pt.place_tag for pt in place.place_tags],
+            "place_name": original_place.place_name,
+            "street_address": original_place.street_address,
+            "latitude": float(original_place.latitude) if original_place.latitude else None,
+            "longitude": float(original_place.longitude) if original_place.longitude else None,
+            "hechsher_ids": [ph.hechsher_id for ph in original_place.place_hechshers],
+            "tags": [pt.place_tag for pt in original_place.place_tags],
+            "aliases": [pa.place_alias for pa in original_place.place_aliases],
         }
 
     # ── AI moderation
     existing_tags = payload_snapshot["original"]["tags"] if "original" in payload_snapshot else None
-    moderation = classify_submission(payload_snapshot, existing_tags=existing_tags)
+    moderation = _moderate_payload(payload_snapshot, existing_tags=existing_tags)
+    if submission_type == "new_place" and moderation.get("result") == "approved":
+        # Safety gate: if no identifiable moderation source/version is attached,
+        # hold the submission for manual review instead of auto-publishing.
+        if moderation.get("source") in {"legacy_unknown", "unknown", ""}:
+            moderation["result"] = "flagged"
+            moderation["reason"] = "Moderation metadata missing; manual review required"
+
+    payload_snapshot["moderation"] = moderation
     spam_result = moderation.get("result", "flagged")
 
     # ── Create submission record
@@ -187,6 +279,9 @@ def submit_place():
         elif submission_type == "tag_update":
             _apply_tag_update(place, payload_snapshot)
             submission.place_id = place.place_id
+        elif submission_type == "alias_update":
+            _apply_alias_update(place, payload_snapshot)
+            submission.place_id = place.place_id
 
         submission.is_visible = True
         submission.published_at = datetime.now(timezone.utc)
@@ -209,7 +304,12 @@ def submit_place():
 
 @api_bp.route("/places/<int:place_id>/tags", methods=["POST"])
 @require_csrf
-@limiter.limit("1 per minute", key_func=get_submission_rate_key, error_message="Rate limit: one submission per minute.")
+@limiter.limit(
+    "1 per minute",
+    key_func=get_submission_rate_key,
+    error_message="Rate limit: one submission per minute.",
+    deduct_when=_deduct_if_successful,
+)
 def tag_place(place_id: int):
     place = Places.query.filter_by(place_id=place_id, is_active=True).first()
     if not place:
@@ -238,11 +338,9 @@ def tag_place(place_id: int):
     }
 
     # Deterministic auto-flag for inconsistent tags
-    if are_tags_inconsistent(existing_tags, proposed_tags):
-        spam_result = "flagged"
-    else:
-        moderation = classify_submission(payload_snapshot, existing_tags=existing_tags)
-        spam_result = moderation.get("result", "flagged")
+    moderation = _moderate_payload(payload_snapshot, existing_tags=existing_tags)
+    payload_snapshot["moderation"] = moderation
+    spam_result = moderation.get("result", "flagged")
 
     submission = Submissions(
         submitted_by_user_id=user_id,
@@ -263,6 +361,71 @@ def tag_place(place_id: int):
     db.session.add(submission)
     db.session.commit()
 
+    return success({"submission": submission.to_dict(), "published": published}, 201)
+
+
+@api_bp.route("/places/<int:place_id>/aliases", methods=["POST"])
+@require_csrf
+@limiter.limit(
+    "1 per minute",
+    key_func=get_submission_rate_key,
+    error_message="Rate limit: one submission per minute.",
+    deduct_when=_deduct_if_successful,
+)
+def alias_place(place_id: int):
+    place = Places.query.filter_by(place_id=place_id, is_active=True).first()
+    if not place:
+        return error_response("not_found", "Place not found", 404)
+
+    user_id = _current_user_id()
+    if user_id is None:
+        return error_response("unauthorized", "Login required to add aliases", 401)
+
+    data = request.get_json() or {}
+    proposed_aliases = [a.strip() for a in data.get("aliases", []) if isinstance(a, str) and a.strip()]
+    reason = data.get("reason", "")
+    if not proposed_aliases:
+        return error_response("validation_error", "aliases array is required", 422)
+
+    existing_aliases = [pa.place_alias for pa in place.place_aliases]
+    payload_snapshot = {
+        "submission_type": "alias_update",
+        "place_id": place_id,
+        "aliases": proposed_aliases,
+        "reason": reason,
+        "original": {"aliases": existing_aliases},
+    }
+
+    moderation = _moderate_payload(payload_snapshot)
+    payload_snapshot["moderation"] = moderation
+    spam_result = moderation.get("result", "flagged")
+
+    submission = Submissions(
+        submitted_by_user_id=user_id,
+        place_id=place_id,
+        submission_type="alias_update",
+        payload_json=payload_snapshot,
+        spam_filter_result=spam_result,
+        admin_review_status="pending_review",
+    )
+
+    published = False
+    if spam_result == "approved":
+        _apply_alias_update(place, payload_snapshot)
+        submission.is_visible = True
+        submission.published_at = datetime.now(timezone.utc)
+        published = True
+
+    db.session.add(submission)
+    try:
+        db.session.commit()
+    except SQLAlchemyError:
+        db.session.rollback()
+        return error_response(
+            "schema_outdated",
+            "Database schema is missing alias submission support. Run database migrations.",
+            503,
+        )
     return success({"submission": submission.to_dict(), "published": published}, 201)
 
 

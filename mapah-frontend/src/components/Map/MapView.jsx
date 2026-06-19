@@ -54,6 +54,22 @@ export default function MapView({ onTagPlace, onEditPlace }) {
         () => { /* use fallback */ },
         { timeout: 5000 },
       );
+
+      // Click on empty map → centre + gentle zoom in
+      map.on('click', (e) => {
+        // Ignore clicks that land on a marker/popup layer
+        const features = map.queryRenderedFeatures(e.point);
+        const hitInteractable = features.some(
+          (f) => f.layer && (f.layer.type === 'symbol' || f.layer.type === 'circle'),
+        );
+        if (hitInteractable) return;
+
+        map.easeTo({
+          center: e.lngLat,
+          zoom: Math.min(map.getZoom() + 1.5, 18),
+          duration: 400,
+        });
+      });
     });
 
     mapRef.current = map;
@@ -62,6 +78,22 @@ export default function MapView({ onTagPlace, onEditPlace }) {
       mapRef.current = null;
     };
   }, []);
+
+  // ── Fly to selected location when user picks from search dropdown ────────
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    if (filters.lat == null || filters.lng == null) return;
+
+    // Use different zoom levels for places vs generic locations
+    const zoom = filters.selectionType === 'place' ? 16 : 14;
+
+    // Fly to the selected location with zoom matching selection type
+    mapRef.current.easeTo({
+      center: [filters.lng, filters.lat],
+      zoom,
+      duration: 600,
+    });
+  }, [mapReady, filters.lat, filters.lng, filters.selectionType]);
 
   // ── Fetch + render markers whenever filters change ────────────────────
   const renderMarkers = useCallback(
@@ -139,7 +171,7 @@ export default function MapView({ onTagPlace, onEditPlace }) {
 
     const params = {
       q: filters.q || undefined,
-      hechsher_id: filters.hechsher?.hechsher_id || undefined,
+      hechsher_id: filters.hechshers.length ? filters.hechshers.map((h) => h.hechsher_id) : undefined,
       tags: filters.tags.length ? filters.tags : undefined,
       radius: filters.radius,
       unit: filters.unit,
@@ -160,5 +192,4 @@ export default function MapView({ onTagPlace, onEditPlace }) {
 
   return <div ref={mapContainer} className="map-container" />;
 }
-
 

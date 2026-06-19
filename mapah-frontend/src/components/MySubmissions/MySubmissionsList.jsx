@@ -1,6 +1,24 @@
 import { useEffect, useState } from 'react';
 import { getMySubmissions } from '../../api/me';
 
+function summaryText(summary = {}) {
+  const parts = [];
+  if (summary.place_name) parts.push(`place: ${summary.place_name}`);
+  if (summary.street_address) parts.push(`address: ${summary.street_address}`);
+  if (Array.isArray(summary.tags) && summary.tags.length) parts.push(`tags: ${summary.tags.join(', ')}`);
+  if (Array.isArray(summary.aliases) && summary.aliases.length) parts.push(`aliases: ${summary.aliases.join(', ')}`);
+  return parts.join(' | ') || 'No summary available';
+}
+
+function moderationText(submission = {}) {
+  const moderation = submission?.payload_json?.moderation || {};
+  const reason = moderation.reason || '';
+  const source = moderation.source || 'unknown';
+  const version = moderation.moderation_version || 'n/a';
+  if (!reason) return `moderation: ${source} (${version})`;
+  return `moderation: ${source} (${version}) - ${reason}`;
+}
+
 export default function MySubmissionsList() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,8 +45,9 @@ export default function MySubmissionsList() {
             <div className="muted">
               spam: {s.spam_filter_result} · admin: {s.admin_review_status}
             </div>
+            <div className="muted">{moderationText(s)}</div>
           </div>
-          <pre>{JSON.stringify(s.payload_json, null, 2)}</pre>
+          <p className="muted">{summaryText(s.summary)}</p>
         </article>
       ))}
     </section>

@@ -12,6 +12,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/api': backendTarget,
         '/auth': backendTarget,
+        '/instance': backendTarget,
       },
     },
   }

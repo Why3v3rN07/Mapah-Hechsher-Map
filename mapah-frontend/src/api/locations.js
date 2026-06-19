@@ -35,6 +35,10 @@ async function searchLocationsViaMapbox(params = {}) {
  */
 export const searchLocations = async (params = {}) => {
   try {
+    // Fast path: query Mapbox directly from the browser when a public token exists.
+    const mapboxRes = await searchLocationsViaMapbox(params);
+    if (mapboxRes) return mapboxRes;
+
     return await client.get('/api/locations/search', { params });
   } catch (error) {
     // Fallbacks for local dev when proxy is not configured/running.
@@ -57,10 +61,27 @@ export const searchLocations = async (params = {}) => {
     }
 
     // Last-resort fallback: query Mapbox directly with the public frontend token.
-    const mapboxRes = await searchLocationsViaMapbox(params);
-    if (mapboxRes) return mapboxRes;
+    const mapboxFallback = await searchLocationsViaMapbox(params);
+    if (mapboxFallback) return mapboxFallback;
 
     throw error;
   }
+};
+
+export const reverseGeocode = async (lat, lng) => {
+  const token = import.meta.env.VITE_MAPBOX_TOKEN;
+  if (!token || !Number.isFinite(Number(lat)) || !Number.isFinite(Number(lng))) {
+    return null;
+  }
+
+  const { data } = await axios.get(`${MAPBOX_PUBLIC_GEOCODE_BASE}/${Number(lng)},${Number(lat)}.json`, {
+    params: {
+      access_token: token,
+      limit: 1,
+    },
+  });
+
+  const placeName = data?.features?.[0]?.place_name;
+  return placeName || null;
 };
 

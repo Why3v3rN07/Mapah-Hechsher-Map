@@ -8,7 +8,7 @@ const FilterContext = createContext(null);
 
 const DEFAULT_FILTERS = {
   q: '',
-  hechsher: null,       // { hechsher_id, hechsher_display_name, hechsher_symbol }
+  hechshers: [],        // Array of { hechsher_id, hechsher_display_name, hechsher_symbol }
   tags: [],
   radius: 1,
   unit: 'mi',
@@ -16,6 +16,7 @@ const DEFAULT_FILTERS = {
   lng: null,
   locationQuery: '',
   locationName: '',     // Display name of selected location
+  selectionType: null,  // 'place' | 'location' | null
 };
 
 export function FilterProvider({ children }) {

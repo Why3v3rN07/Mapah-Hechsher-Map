@@ -1,7 +1,7 @@
 import os
 import secrets
 
-from flask import Flask, request
+from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 
 from .config import config_by_name
@@ -80,6 +80,12 @@ def create_app(test_config: dict | None = None) -> Flask:
                 path="/",
             )
         return response
+
+    @app.route("/instance/uploads/hechshers/<path:filename>", methods=["GET"])
+    def serve_legacy_hechsher_icon(filename: str):
+        # Backward compatibility for existing DB rows that store /instance/... icon URLs.
+        upload_dir = os.path.join(app.instance_path, "uploads", "hechshers")
+        return send_from_directory(upload_dir, filename)
 
     # ── Blueprints ────────────────────────────────────────────────────────
     from .auth import auth_bp

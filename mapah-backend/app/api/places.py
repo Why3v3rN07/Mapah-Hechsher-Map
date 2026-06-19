@@ -7,11 +7,13 @@ import secrets
 from flask import request
 from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
 from sqlalchemy import or_
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.extensions import db
 from app.models import (
     Hechshers,
     HechsherAliases,
+    PlaceAliases,
     PlaceHechshers,
     PlaceTags,
     Places,
@@ -64,10 +66,43 @@ def search_locations():
 
 # ── Places listing ────────────────────────────────────────────────────────────
 
+@api_bp.route("/places/<int:place_id>/aliases", methods=["GET"])
+def get_place_aliases(place_id: int):
+    place = Places.query.filter_by(place_id=place_id, is_active=True).first()
+    if not place:
+        return error_response("not_found", "Place not found", 404)
+
+    try:
+        aliases = (
+            PlaceAliases.query.filter_by(place_id=place_id)
+            .order_by(PlaceAliases.place_alias.asc())
+            .all()
+        )
+    except SQLAlchemyError:
+        return error_response(
+            "schema_outdated",
+            "Database schema is missing alias tables. Run database migrations.",
+            503,
+        )
+    return success({"items": [row.place_alias for row in aliases], "count": len(aliases)})
+
+
+# ── Places listing ────────────────────────────────────────────────────────────
+
 @api_bp.route("/places", methods=["GET"])
 def get_places():
     q = request.args.get("q", "").strip()
-    hechsher_id = request.args.get("hechsher_id", type=int)
+    # Support hechsher_id, hechsher_id[], and comma-separated values.
+    hechsher_ids = request.args.getlist("hechsher_id") or request.args.getlist("hechsher_id[]")
+    if len(hechsher_ids) == 1 and "," in hechsher_ids[0]:
+        hechsher_ids = [part.strip() for part in hechsher_ids[0].split(",") if part.strip()]
+    hechsher_id = None
+    if hechsher_ids:
+        try:
+            hechsher_id = [int(h) for h in hechsher_ids]
+        except (ValueError, TypeError):
+            return error_response("invalid_query", "hechsher_id must be a valid integer", 400)
+    apply_preferred_hechshers = request.args.get("apply_preferred_hechshers", "true").lower() in ("1", "true", "yes")
     hechsher_name = request.args.get("hechsher", "").strip()
     tags = request.args.getlist("tags[]") or request.args.getlist("tags")
     radius = request.args.get("radius", 1.0, type=float)
@@ -92,7 +127,7 @@ def get_places():
 
     # If the user is authenticated and no hechsher filter provided,
     # default to their preferred hechshers (spec §2 Map defaults)
-    if not hechsher_id and not hechsher_name:
+    if apply_preferred_hechshers and not hechsher_id and not hechsher_name:
         try:
             verify_jwt_in_request(optional=True)
             user_id = int(get_jwt_identity()) if get_jwt_identity() is not None else None

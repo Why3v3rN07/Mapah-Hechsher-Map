@@ -1,12 +1,13 @@
 /**
- * Hechsher typeahead: searches by name + alias, shows icon + display name.
+ * Hechsher typeahead with multi-select: searches by name + alias, shows icon + display name.
+ * Allows selecting multiple hechshers; selected items appear as removable pills.
  */
 import { useEffect, useRef, useState } from 'react';
 import { searchHechshers } from '../../api/hechshers';
 import './HechsherSearch.css';
 
-export default function HechsherSearch({ value, onChange }) {
-  const [query, setQuery] = useState(value?.hechsher_display_name ?? '');
+export default function HechsherSearch({ value = [], onChange }) {
+  const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const debounceRef = useRef(null);
@@ -39,20 +40,49 @@ export default function HechsherSearch({ value, onChange }) {
   }, []);
 
   const select = (h) => {
-    setQuery(h.hechsher_display_name);
+    // Check if already selected
+    const isSelected = value.some((sel) => sel.hechsher_id === h.hechsher_id);
+    if (!isSelected) {
+      onChange([...value, h]);
+    }
+    setQuery('');
     setOpen(false);
-    onChange(h);
+    setSuggestions([]);
+  };
+
+  const remove = (hechsherId) => {
+    onChange(value.filter((h) => h.hechsher_id !== hechsherId));
   };
 
   const clear = () => {
     setQuery('');
     setOpen(false);
-    onChange(null);
+    onChange([]);
+    setSuggestions([]);
   };
-
   return (
     <div className="hechsher-search" ref={containerRef}>
       <div className="hechsher-search-input-wrap">
+        {/* Display selected hechshers as pills */}
+        {value.length > 0 && (
+          <div className="hechsher-pills">
+            {value.map((h) => (
+              <div key={h.hechsher_id} className="hechsher-pill">
+                {h.hechsher_symbol && (
+                  <img src={h.hechsher_symbol} alt="" className="pill-icon" />
+                )}
+                <span className="pill-name">{h.hechsher_display_name}</span>
+                <button
+                  className="pill-remove"
+                  onClick={() => remove(h.hechsher_id)}
+                  aria-label="Remove"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <input
           className="input"
           placeholder="Search hechsher…"
@@ -60,15 +90,12 @@ export default function HechsherSearch({ value, onChange }) {
           onChange={(e) => {
             const next = e.target.value;
             setQuery(next);
-            if (!next) {
-              setSuggestions([]);
-              clear();
-            }
+            if (!next) setSuggestions([]);
           }}
           onFocus={() => suggestions.length && setOpen(true)}
         />
-        {query && (
-          <button className="hechsher-clear-btn" onClick={clear} aria-label="Clear">×</button>
+        {value.length > 0 && (
+          <button className="hechsher-clear-btn" onClick={clear} aria-label="Clear all">Clear all</button>
         )}
       </div>
 

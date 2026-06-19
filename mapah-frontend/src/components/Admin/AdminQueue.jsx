@@ -1,6 +1,33 @@
 import { useEffect, useState } from 'react';
 import { approveSubmission, listAdminSubmissions, rejectSubmission } from '../../api/admin';
 
+function summaryText(summary = {}) {
+  const parts = [];
+  if (summary.place_name) parts.push(`place: ${summary.place_name}`);
+  if (summary.hechsher_display_name) parts.push(`hechsher: ${summary.hechsher_display_name}`);
+  if (summary.street_address) parts.push(`address: ${summary.street_address}`);
+  if (Array.isArray(summary.hechsher_ids) && summary.hechsher_ids.length) {
+    parts.push(`hechshers: ${summary.hechsher_ids.join(', ')}`);
+  }
+  if (Array.isArray(summary.tags) && summary.tags.length) {
+    parts.push(`tags: ${summary.tags.join(', ')}`);
+  }
+  if (Array.isArray(summary.aliases) && summary.aliases.length) {
+    parts.push(`aliases: ${summary.aliases.join(', ')}`);
+  }
+  if (summary.reason) parts.push(`reason: ${summary.reason}`);
+  return parts.join(' | ') || 'No summary available';
+}
+
+function moderationText(submission = {}) {
+  const moderation = submission?.payload_json?.moderation || {};
+  const reason = moderation.reason || '';
+  const source = moderation.source || 'unknown';
+  const version = moderation.moderation_version || 'n/a';
+  if (!reason) return `moderation: ${source} (${version})`;
+  return `moderation: ${source} (${version}) - ${reason}`;
+}
+
 export default function AdminQueue() {
   const [flagged, setFlagged] = useState([]);
   const [approved, setApproved] = useState([]);
@@ -32,8 +59,7 @@ export default function AdminQueue() {
   };
 
   const onReject = async (id) => {
-    const reason = window.prompt('Reason for rejection (optional)') ?? '';
-    await rejectSubmission(id, reason);
+    await rejectSubmission(id);
     await load();
   };
 
@@ -42,23 +68,24 @@ export default function AdminQueue() {
 
   return (
     <div className="admin-grid">
-      <section className="page-card">
-        <h3>Flagged</h3>
-        {flagged.length === 0 && <p>No flagged submissions.</p>}
-        {flagged.map((s) => (
-          <article key={s.submission_id} className="queue-item">
-            <div>
-              <strong>#{s.submission_id}</strong> {s.submission_type}
-              <div className="muted">status: {s.admin_review_status}</div>
-            </div>
-            <div className="row-actions">
-              <button className="btn btn-primary" onClick={() => onApprove(s.submission_id)}>Approve</button>
-              <button className="btn btn-secondary" onClick={() => onReject(s.submission_id)}>Reject</button>
-            </div>
-            <pre>{JSON.stringify(s.payload_json, null, 2)}</pre>
-          </article>
-        ))}
-      </section>
+       <section className="page-card">
+         <h3>Flagged</h3>
+         {flagged.length === 0 && <p>No flagged submissions.</p>}
+         {flagged.map((s) => (
+           <article key={s.submission_id} className="queue-item">
+             <div>
+               <strong>#{s.submission_id}</strong> {s.submission_type}
+               <div className="muted">status: {s.admin_review_status}</div>
+               <div className="muted">{moderationText(s)}</div>
+             </div>
+             <div className="row-actions">
+               <button className="btn btn-primary" onClick={() => onApprove(s.submission_id)}>Approve</button>
+               <button className="btn btn-secondary" onClick={() => onReject(s.submission_id)}>Reject</button>
+             </div>
+             <p className="muted">{summaryText(s.summary)}</p>
+           </article>
+         ))}
+       </section>
 
       <section className="page-card">
         <h3>Non-flagged</h3>
@@ -77,7 +104,7 @@ export default function AdminQueue() {
                 </>
               )}
             </div>
-            <pre>{JSON.stringify(s.payload_json, null, 2)}</pre>
+            <p className="muted">{summaryText(s.summary)}</p>
           </article>
         ))}
       </section>

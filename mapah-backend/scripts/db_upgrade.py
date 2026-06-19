@@ -32,7 +32,7 @@ with app.app_context():
     insp = db.inspect(db.engine)
     required = {
         'users', 'places', 'hechshers', 'hechsher_aliases',
-        'place_tags', 'place_hechshers', 'submissions',
+        'place_tags', 'place_hechshers', 'place_aliases', 'submissions',
         'user_preferred_hechshers', 'refresh_token_families',
         'refresh_tokens', 'revoked_tokens'
     }

@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from flask import request
 
 from app.extensions import db
-from app.models import PlaceHechshers, PlaceTags, Places, Submissions
+from app.models import Hechshers, HechsherAliases, PlaceAliases, PlaceHechshers, PlaceTags, Places, Submissions
 from app.utils.security import admin_required, error_response, require_csrf, success
 from . import api_bp
 
@@ -31,6 +31,9 @@ def list_admin_submissions():
         query = query.filter_by(spam_filter_result=spam_filter)
     if admin_status in ("pending_review", "approved", "rejected"):
         query = query.filter_by(admin_review_status=admin_status)
+    else:
+        # Default to showing only pending submissions
+        query = query.filter_by(admin_review_status="pending_review")
 
     total = query.count()
     items = query.offset((page - 1) * page_size).limit(page_size).all()
@@ -80,6 +83,8 @@ def approve_submission(submission_id: int):
                 db.session.add(PlaceHechshers(place_id=place.place_id, hechsher_id=hid))
             for tag in payload.get("tags", []):
                 db.session.add(PlaceTags(place_id=place.place_id, place_tag=tag))
+            for alias in payload.get("aliases", []):
+                db.session.add(PlaceAliases(place_id=place.place_id, place_alias=alias))
             submission.place_id = place.place_id
 
         elif sub_type == "edit" and submission.place_id:
@@ -101,6 +106,10 @@ def approve_submission(submission_id: int):
                     PlaceTags.query.filter_by(place_id=place.place_id).delete()
                     for tag in payload["tags"]:
                         db.session.add(PlaceTags(place_id=place.place_id, place_tag=tag))
+                if "aliases" in payload:
+                    PlaceAliases.query.filter_by(place_id=place.place_id).delete()
+                    for alias in payload["aliases"]:
+                        db.session.add(PlaceAliases(place_id=place.place_id, place_alias=alias))
 
         elif sub_type == "tag_update" and submission.place_id:
             place = Places.query.get(submission.place_id)
@@ -108,6 +117,30 @@ def approve_submission(submission_id: int):
                 PlaceTags.query.filter_by(place_id=place.place_id).delete()
                 for tag in payload.get("tags", []):
                     db.session.add(PlaceTags(place_id=place.place_id, place_tag=tag))
+
+        elif sub_type == "alias_update" and submission.place_id:
+            place = Places.query.get(submission.place_id)
+            if place:
+                PlaceAliases.query.filter_by(place_id=place.place_id).delete()
+                for alias in payload.get("aliases", []):
+                    db.session.add(PlaceAliases(place_id=place.place_id, place_alias=alias))
+
+        elif sub_type == "hechsher_create":
+            hechsher_data = payload.get("hechsher", {})
+            existing = None
+            if hechsher_data.get("hechsher_id"):
+                existing = Hechshers.query.get(hechsher_data["hechsher_id"])
+            if not existing:
+                existing = Hechshers(
+                    hechsher_display_name=hechsher_data.get("hechsher_display_name", ""),
+                    hechsher_symbol=hechsher_data.get("hechsher_symbol"),
+                )
+                db.session.add(existing)
+                db.session.flush()
+                for alias in hechsher_data.get("aliases", []):
+                    db.session.add(HechsherAliases(hechsher_id=existing.hechsher_id, hechsher_alias=alias))
+            payload["hechsher"]["hechsher_id"] = existing.hechsher_id
+            submission.payload_json = payload
 
         submission.is_visible = True
         submission.published_at = datetime.now(timezone.utc)
@@ -147,7 +180,7 @@ def reject_submission(submission_id: int):
             if place:
                 place.is_active = False  # soft-delete
 
-        elif sub_type in ("edit", "tag_update") and submission.place_id:
+        elif sub_type in ("edit", "tag_update", "alias_update") and submission.place_id:
             original = payload.get("original")
             place = Places.query.get(submission.place_id)
             if place and original:
@@ -165,6 +198,14 @@ def reject_submission(submission_id: int):
                     PlaceTags.query.filter_by(place_id=place.place_id).delete()
                     for tag in original["tags"]:
                         db.session.add(PlaceTags(place_id=place.place_id, place_tag=tag))
+                if sub_type == "alias_update" and "aliases" in original:
+                    PlaceAliases.query.filter_by(place_id=place.place_id).delete()
+                    for alias in original["aliases"]:
+                        db.session.add(PlaceAliases(place_id=place.place_id, place_alias=alias))
+                if sub_type == "edit" and "aliases" in original:
+                    PlaceAliases.query.filter_by(place_id=place.place_id).delete()
+                    for alias in original["aliases"]:
+                        db.session.add(PlaceAliases(place_id=place.place_id, place_alias=alias))
 
     db.session.commit()
     return success({

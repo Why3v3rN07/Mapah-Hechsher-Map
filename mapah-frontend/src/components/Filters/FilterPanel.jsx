@@ -24,28 +24,35 @@ export default function FilterPanel() {
       {/* Unified search for places and locations */}
       <div className="filter-section">
         <label className="filter-label">Search</label>
-        <UnifiedSearch
-          valuePlaceName={filters.q}
-          valueLocationName={filters.locationQuery}
-          onSelectPlace={(q) => {
-            updateFilter('q', q);
-            // Clear location filter when selecting a place
-            updateFilter('locationQuery', '');
-            updateFilter('lat', null);
-            updateFilter('lng', null);
-          }}
-          onSelectLocation={(locationName, lat, lng) => {
-            // Clear place filter when selecting a location
-            updateFilter('q', '');
-            updateFilter('locationQuery', locationName);
-            if (Number.isFinite(lat) && Number.isFinite(lng)) {
-              updateFilter('lat', lat);
-              updateFilter('lng', lng);
-            } else {
-              updateFilter('lat', null);
-              updateFilter('lng', null);
-            }
-          }}
+         <UnifiedSearch
+           valuePlaceName={filters.q}
+           valueLocationName={filters.locationQuery}
+           onSelectPlace={(q, lat, lng) => {
+             updateFilter('q', q);
+             updateFilter('selectionType', 'place');
+             // Clear location filter when selecting a place
+             updateFilter('locationQuery', '');
+             if (Number.isFinite(lat) && Number.isFinite(lng)) {
+               updateFilter('lat', lat);
+               updateFilter('lng', lng);
+             } else {
+               updateFilter('lat', null);
+               updateFilter('lng', null);
+             }
+           }}
+           onSelectLocation={(locationName, lat, lng) => {
+             updateFilter('selectionType', 'location');
+             // Clear place filter when selecting a location
+             updateFilter('q', '');
+             updateFilter('locationQuery', locationName);
+             if (Number.isFinite(lat) && Number.isFinite(lng)) {
+               updateFilter('lat', lat);
+               updateFilter('lng', lng);
+             } else {
+               updateFilter('lat', null);
+               updateFilter('lng', null);
+             }
+           }}
           onClear={() => {
             updateFilter('q', '');
             updateFilter('locationQuery', '');
@@ -59,8 +66,8 @@ export default function FilterPanel() {
       <div className="filter-section">
         <label className="filter-label">Hechsher</label>
         <HechsherSearch
-          value={filters.hechsher}
-          onChange={(h) => updateFilter('hechsher', h)}
+          value={filters.hechshers}
+          onChange={(hs) => updateFilter('hechshers', hs)}
         />
       </div>
 

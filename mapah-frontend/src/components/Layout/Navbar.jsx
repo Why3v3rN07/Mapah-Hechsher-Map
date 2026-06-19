@@ -25,6 +25,7 @@ export default function Navbar({ onOpenAuth, onOpenSubmit }) {
             {user.user_status === 'admin' && (
               <Link to="/admin" className="btn btn-ghost">Admin</Link>
             )}
+            <Link to="/preferences" className="btn btn-ghost">Preferences</Link>
             <Link to="/my-submissions" className="btn btn-ghost">My Submissions</Link>
             <span className="navbar-username">{user.user_name}</span>
             <button className="btn btn-secondary" onClick={handleLogout}>Log out</button>

@@ -1,3 +1,6 @@
+## Note that this readme is outdated. Refer to spec.md for better info.
+
+
 # Mapah Frontend
 
 React + Vite frontend for Mapah MVP.

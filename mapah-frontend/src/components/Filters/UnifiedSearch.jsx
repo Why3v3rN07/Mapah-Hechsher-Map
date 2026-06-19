@@ -4,8 +4,27 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { searchLocations } from '../../api/locations';
-import { searchPlacesAndLocations } from '../../api/search';
+import { getPlaces } from '../../api/places';
 import './UnifiedSearch.css';
+
+const DEBOUNCE_MS = 120;
+const CACHE_LIMIT = 25;
+
+function normalizeQuery(value) {
+  return String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function mergeUnique(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = item.type === 'location'
+      ? `location:${item.place_name}:${item.lat}:${item.lng}`
+      : `place:${item.place_id ?? item.place_name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 export default function UnifiedSearch({ valuePlaceName, valueLocationName, onSelectPlace, onSelectLocation, onClear }) {
   // Use location name if set, otherwise place name
@@ -15,6 +34,8 @@ export default function UnifiedSearch({ valuePlaceName, valueLocationName, onSel
   const [open, setOpen] = useState(false);
   const debounceRef = useRef(null);
   const containerRef = useRef(null);
+  const cacheRef = useRef(new Map());
+  const requestSeqRef = useRef(0);
 
   useEffect(() => {
     setQuery(currentValue ?? '');
@@ -22,23 +43,61 @@ export default function UnifiedSearch({ valuePlaceName, valueLocationName, onSel
 
   useEffect(() => {
     clearTimeout(debounceRef.current);
-    if (!query.trim()) {
+    const normalized = normalizeQuery(query);
+
+    if (!normalized) {
       setSuggestions([]);
       setOpen(false);
       return;
     }
 
+    const cached = cacheRef.current.get(normalized);
+    if (cached) {
+      setSuggestions(cached);
+      setOpen(true);
+      return;
+    }
+
+    setSuggestions([]);
+    setOpen(false);
+
     debounceRef.current = setTimeout(async () => {
-      try {
-        const { data } = await searchPlacesAndLocations(query);
-        const results = data.items || [];
-        setSuggestions(results);
-        setOpen(results.length > 0);
-      } catch {
-        setSuggestions([]);
-        setOpen(false);
-      }
-    }, 200);
+      const requestSeq = ++requestSeqRef.current;
+      let placeItems = [];
+      let locationItems = [];
+
+      const applyResults = () => {
+        if (requestSeq !== requestSeqRef.current) return;
+        const merged = mergeUnique([...placeItems, ...locationItems]);
+        cacheRef.current.set(normalized, merged);
+        if (cacheRef.current.size > CACHE_LIMIT) {
+          const oldestKey = cacheRef.current.keys().next().value;
+          cacheRef.current.delete(oldestKey);
+        }
+        setSuggestions(merged);
+        setOpen(merged.length > 0);
+      };
+
+      getPlaces({ q: query })
+        .then(({ data }) => {
+          placeItems = (data?.items || []).map((item) => ({ type: 'place', ...item }));
+          applyResults();
+        })
+        .catch(() => {
+          placeItems = [];
+          applyResults();
+        });
+
+      searchLocations({ q: query, limit: 8 })
+        .then(({ data }) => {
+          locationItems = (data?.items || []).map((item) => ({ type: 'location', ...item }));
+          applyResults();
+        })
+        .catch(() => {
+          locationItems = [];
+          applyResults();
+        });
+    }, DEBOUNCE_MS);
 
     return () => clearTimeout(debounceRef.current);
   }, [query]);
@@ -53,9 +112,13 @@ export default function UnifiedSearch({ valuePlaceName, valueLocationName, onSel
   }, []);
 
   const select = (item) => {
+    const normalized = normalizeQuery(item.place_name);
+    if (normalized) {
+      cacheRef.current.set(normalized, [item]);
+    }
     if (item.type === 'place') {
       setQuery(item.place_name);
-      onSelectPlace?.(item.place_name);
+      onSelectPlace?.(item.place_name, item.lat, item.lng);
     } else if (item.type === 'location') {
       setQuery(item.place_name);
       onSelectLocation?.(item.place_name, item.lat, item.lng);
@@ -67,6 +130,18 @@ export default function UnifiedSearch({ valuePlaceName, valueLocationName, onSel
   const resolveTypedLocation = async () => {
     const typed = query.trim();
     if (!typed) return;
+
+    const normalized = normalizeQuery(typed);
+    const cached = cacheRef.current.get(normalized);
+    const cachedLocation = cached?.find((item) => item.type === 'location' && Number.isFinite(item.lat) && Number.isFinite(item.lng));
+    if (cachedLocation) {
+      const resolvedName = cachedLocation.place_name || typed;
+      setQuery(resolvedName);
+      onSelectLocation?.(resolvedName, cachedLocation.lat, cachedLocation.lng);
+      setSuggestions([]);
+      setOpen(false);
+      return;
+    }
 
     try {
       const { data } = await searchLocations({ q: typed, limit: 1 });

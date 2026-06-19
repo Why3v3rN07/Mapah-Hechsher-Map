@@ -4,5 +4,7 @@ from app import create_app
 app = create_app()
 
 if __name__ == "__main__":
-    port = int(os.getenv("FLASK_RUN_PORT", 5000))
-    app.run(debug=True, port=port)
+    host = os.getenv("FLASK_RUN_HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", os.getenv("FLASK_RUN_PORT", 5000)))
+    debug = os.getenv("FLASK_DEBUG", "0").lower() in ("1", "true", "yes")
+    app.run(host=host, debug=debug, port=port)
